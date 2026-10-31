@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#03030a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TenSaint73OS">
+<title>TenSaint73OS · 圣钥协议</title>
+<link rel="icon" type="image/png" href="/logo.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/css/style.css?v=1.3.0">
+</head>
+<body class="booting">
+<canvas id="bg-canvas"></canvas>
+<div class="fx-aurora"></div>
+<div class="fx-gridlines"></div>
+<div class="fx-scan"></div>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+<div class="hud-corners" aria-hidden="true"><i class="c1"></i><i class="c2"></i><i class="c3"></i><i class="c4"></i></div>
+<div class="hud-edge hud-edge-l" aria-hidden="true"></div>
+<div class="hud-edge hud-edge-r" aria-hidden="true"></div>
+
+<!-- ============ 启动画面 ============ -->
+<div id="boot-screen">
+  <div class="boot-stage">
+    <div class="boot-orbits" aria-hidden="true">
+      <span class="orbit o1"></span><span class="orbit o2"></span><span class="orbit o3"></span>
+      <span class="orbit-tick"></span>
+    </div>
+    <img src="/logo.png" class="boot-logo" alt="TenSaint73OS">
+    <div class="boot-kicker">SANCTUM KEY PROTOCOL // NODE 73</div>
+    <h1 class="boot-title">TENSAINT<span>73</span>OS</h1>
+    <div class="boot-console">
+      <div class="boot-console-bar"><span>SECURE BOOT</span><span id="boot-pct">00%</span></div>
+      <div class="boot-text" id="boot-text"></div>
+      <div class="boot-bar"><div class="boot-bar-fill" id="boot-bar-fill"></div><i class="boot-bar-scan"></i></div>
+      <div class="boot-hex" id="boot-hex"></div>
+    </div>
+    <div class="boot-status" id="boot-status">INITIALIZING CORE</div>
+  </div>
+</div>
+
+<!-- ============ 登录 / 注册 ============ -->
+<div id="login-screen" class="hidden">
+  <div class="login-shell">
+    <section class="login-hero">
+      <div class="hero-badge"><span class="dot"></span> ACCESS TERMINAL · v73</div>
+      <div class="hero-emblem">
+        <span class="emblem-ring er1"></span>
+        <span class="emblem-ring er2"></span>
+        <span class="emblem-ring er3"></span>
+        <span class="emblem-sweep"></span>
+        <img src="/logo.png" alt="TenSaint73OS">
+      </div>
+      <h1 class="hero-title" data-text="TENSAINT73OS">TENSAINT<span>73</span>OS</h1>
+      <div class="hero-sub">圣 钥 协 议 · 私 有 加 密 节 点</div>
+      <p class="hero-desc">每个身份拥有独立的加密文件仓库与数据矩阵。<br>密钥由本机铸造，数据只属于你。</p>
+      <div class="hero-chips">
+        <span>◈ AES-256-GCM</span><span>◈ ZERO-DEPENDENCY</span><span>◈ SANDBOX</span>
+      </div>
+      <div class="hero-metrics">
+        <div><b>256</b><span>BIT CIPHER</span></div>
+        <div><b>73</b><span>NODE SEAL</span></div>
+        <div><b>∞</b><span>PRIVATE SPACE</span></div>
+      </div>
+    </section>
+
+    <section class="auth-panel">
+      <div class="panel-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="auth-head">
+        <div>
+          <div class="auth-code">IDENTITY GATEWAY</div>
+          <div class="auth-title" id="auth-title">身份接入</div>
+        </div>
+        <div class="auth-tabs" id="auth-tabs">
+          <button type="button" class="auth-tab active" data-mode="login">登 录</button>
+          <button type="button" class="auth-tab" data-mode="register">注 册</button>
+        </div>
+      </div>
+
+      <form id="login-form" autocomplete="on">
+        <label class="login-field">
+          <span class="login-label">身 份 标 识</span>
+          <span class="input-wrap"><i>◈</i><input type="text" id="login-user" autocomplete="username" spellcheck="false" placeholder="USERNAME" required></span>
+        </label>
+        <label class="login-field">
+          <span class="login-label">访 问 密 钥</span>
+          <span class="input-wrap"><i>✶</i><input type="password" id="login-pass" autocomplete="current-password" placeholder="PASSWORD" required><button type="button" class="eye" data-target="login-pass">◉</button></span>
+        </label>
+        <label class="login-field">
+          <span class="login-label">安 全 手 机 · 已绑定时必填</span>
+          <span class="input-wrap"><i>▣</i><input type="tel" id="login-phone" autocomplete="tel" inputmode="tel" spellcheck="false" maxlength="20" placeholder="BOUND PHONE (OPTIONAL)"></span>
+        </label>
+        <div class="login-secure-note">绑定安全手机后, 登录需同时验证密码与该号码 · 号码全程加密保存</div>
+        <button type="submit" class="btn-gold" id="login-btn"><span>连 接 系 统</span><i>➤</i></button>
+      </form>
+
+      <form id="register-form" class="hidden" autocomplete="off">
+        <label class="login-field">
+          <span class="login-label">新 身 份 名</span>
+          <span class="input-wrap"><i>◈</i><input type="text" id="reg-user" autocomplete="username" spellcheck="false" placeholder="2-20 位, 中英文/数字" required></span>
+        </label>
+        <label class="login-field">
+          <span class="login-label">设 置 密 钥</span>
+          <span class="input-wrap"><i>✶</i><input type="password" id="reg-pass" autocomplete="new-password" placeholder="至少 8 位" required><button type="button" class="eye" data-target="reg-pass">◉</button></span>
+        </label>
+        <div class="strength"><div class="strength-bar"><i id="reg-strength"></i></div><span id="reg-strength-text">强度检测</span></div>
+        <label class="login-field">
+          <span class="login-label">确 认 密 钥</span>
+          <span class="input-wrap"><i>✶</i><input type="password" id="reg-pass2" autocomplete="new-password" placeholder="再次输入" required><button type="button" class="eye" data-target="reg-pass2">◉</button></span>
+        </label>
+        <button type="submit" class="btn-gold" id="register-btn"><span>铸 造 新 节 点</span><i>✦</i></button>
+        <div class="reg-note">注册后自动分配独立加密空间：文件、数据表与所有其他用户完全隔离。</div>
+      </form>
+
+      <div class="login-error hidden" id="login-error"></div>
+      <div class="auth-foot">
+        <span class="auth-signal"><i></i><i></i><i></i><i></i></span>
+        <span>SECURE CHANNEL · 本地回环</span>
+        <span id="reg-state-chip" class="auth-chip">注册开放</span>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ============ 管理员控制台 ============ -->
+<div id="app" class="hidden app-shell">
+  <aside id="sidebar">
+    <div class="side-brand">
+      <div class="brand-orb"><img src="/logo.png" alt=""><span class="brand-ring"></span></div>
+      <div>
+        <div class="side-name">TENSAINT<span>73</span></div>
+        <div class="side-ver" id="side-ver">OS v1.3.0 · ADMIN</div>
+      </div>
+    </div>
+    <div class="side-kicker">CONTROL MATRIX</div>
+    <nav id="side-nav"></nav>
+    <div class="side-foot">
+      <div class="side-user" id="side-user"></div>
+      <button class="icon-btn danger" id="btn-lock" title="注销登录">⏻</button>
+    </div>
+  </aside>
+  <div class="main">
+    <header id="topbar">
+      <div class="tb-left">
+        <div class="tb-kicker">ADMIN CONSOLE // ROOT ACCESS</div>
+        <div class="tb-title" id="tb-title">控制台</div>
+      </div>
+      <div class="tb-right">
+        <span class="tb-chip online" id="tb-status"><i></i>ONLINE</span>
+        <span class="tb-chip dim" id="tb-uptime">UPTIME --</span>
+        <span class="tb-clock" id="tb-clock"></span>
+      </div>
+    </header>
+    <main id="content"></main>
+    <div class="ticker"><span class="ticker-label">SYS FEED</span><div class="ticker-track" id="ticker-admin"></div><span class="ticker-clock" id="tb-clock2"></span></div>
+  </div>
+</div>
+
+<!-- ============ 会员个人空间 ============ -->
+<div id="member-app" class="hidden app-shell member-shell">
+  <aside id="m-sidebar">
+    <div class="side-brand">
+      <div class="brand-orb member-orb"><img src="/logo.png" alt=""><span class="brand-ring"></span></div>
+      <div>
+        <div class="side-name">PRIVATE<span>NODE</span></div>
+        <div class="side-ver" id="m-nodeid">TS73-····</div>
+      </div>
+    </div>
+    <div class="side-kicker">PERSONAL MATRIX</div>
+    <nav id="m-nav"></nav>
+    <div class="side-foot">
+      <div class="member-chip" id="m-userchip"></div>
+      <button class="icon-btn danger" id="m-logout" title="注销登录">⏻</button>
+    </div>
+  </aside>
+  <div class="main">
+    <header id="m-topbar">
+      <div class="tb-left">
+        <div class="tb-kicker">PERSONAL NODE // ISOLATED SPACE</div>
+        <div class="tb-title" id="m-title">指挥舱</div>
+      </div>
+      <div class="tb-right">
+        <span class="tb-chip online"><i></i>SEALED</span>
+        <span class="tb-chip dim" id="m-space">PRIVATE</span>
+        <span class="tb-clock" id="m-clock"></span>
+      </div>
+    </header>
+    <main id="m-content"></main>
+    <div class="ticker"><span class="ticker-label">NODE FEED</span><div class="ticker-track" id="ticker-member"></div><span class="ticker-clock" id="m-clock2"></span></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<div id="modal-root"></div>
+<style id="custom-css"></style>
+<script src="/js/app.js?v=1.3.0"></script>
+</body>
+</html>

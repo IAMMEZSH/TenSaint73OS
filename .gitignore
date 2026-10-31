@@ -1,0 +1,29 @@
+# Runtime data — never commit real vaults, keys or user content
+data/*
+!data/admin.env.example
+admin.env
+*.tsowner
+
+# Bundled runtimes and downloaded binaries
+runtime/
+node_modules/
+tools/
+
+# Release archives and backups
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tar.gz.enc
+*.bak
+*.bak-*
+
+# Logs and temporary files
+*.log
+*.tmp
+*.part
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
