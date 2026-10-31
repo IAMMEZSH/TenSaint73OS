@@ -397,8 +397,8 @@ wake lock for long sessions. A desktop widget helper is included:
 sh ~/TenSaint73OS-Android-Termux/安装-Termux桌面小部件.sh
 ```
 
-For the in-console tunnel on Termux, `pkg install -y cloudflared` is the most
-reliable way to provide the binary.
+For the in-console tunnel on Termux, use the console's **安装隧道组件** button.
+`pkg install -y cloudflared` remains a manual fallback.
 
 ### 6.4 iPhone / iPad (iSH)
 
@@ -613,15 +613,33 @@ forwarding, public IP or DNS record is required.
 
 ### 9.3 In-console installation
 
-`/api/tunnel/install` downloads the matching `cloudflared` asset from Cloudflare's
-official release channel into `tools/`. On Termux, prefer:
+The admin console's **安装隧道组件** button (`POST /api/tunnel/install`) is a
+one-click flow. It selects the matching `cloudflared` asset for the current
+platform (Windows, Linux, Android/Termux, iPhone/iSH, macOS), downloads it from
+Cloudflare's official release channel, and falls back to public mirrors when
+GitHub is unreachable. Large binaries are fetched with parallel range requests,
+so a single throttled connection cannot stall the install. On Windows the
+Authenticode signature is verified; every platform then runs
+`cloudflared --version` as a self-test. When installation succeeds, the console
+starts the tunnel immediately and polls until the random
+`trycloudflare.com` URL appears.
+
+The server starts quick tunnels with `--protocol http2 --edge-ip-version 4`
+because many networks block UDP/QUIC. `run-online.sh` uses the same flags and
+prefers `tools/cloudflared` before any system-wide binary.
+
+If the download is blocked on your network, install cloudflared manually:
 
 ```bash
-pkg install -y cloudflared
+pkg install -y cloudflared       # Termux
 ```
 
-On iSH, a compatible binary is not guaranteed. Use a desktop host or access a
-desktop host's tunnel from the iPhone.
+On iSH the installer fetches the linux-386 build and self-tests it. If the iSH
+process cannot run the binary or iOS suspends it in the background, use a
+desktop host and open its tunnel URL from the iPhone.
+
+After replacing program files, fully exit and restart the server so the browser
+loads the new `public/js/app.js`.
 
 ### 9.4 Named tunnel (optional, stable URL)
 

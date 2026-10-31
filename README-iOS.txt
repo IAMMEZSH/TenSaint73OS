@@ -68,6 +68,10 @@ Windows 防火墙需放行时，只允许专用网络。
 电脑关机/睡眠时隧道和页面都会失效；数据仍在电脑的 data 目录。
 隧道可以在管理员页面「网络矩阵 → 隧道控制」开启，也可以运行
 run-online.sh（cloudflared 快速隧道）。
+「安装隧道组件」在 iSH 里同样可用: 会自动下载 linux-386 版本并自检,
+装好直接开启并显示 https://xxxx.trycloudflare.com 随机地址;
+若 iSH 跑不动 cloudflared, 就改用 Windows / Linux 电脑开隧道。
+替换或升级程序文件后, 需完全退出 iSH 里的 node 再重新启动。
 
 数据与安全
 ----------

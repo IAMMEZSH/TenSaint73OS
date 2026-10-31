@@ -1757,10 +1757,23 @@ async function renderNetwork(c) {
       const ins = el('button', 'btn btn-accent', '安装隧道组件');
       ins.onclick = async () => {
         setBtnBusy(ins, true, '下 载 中 ...');
-        try { await api('POST', '/api/tunnel/install'); toast('隧道组件已安装'); }
-        catch (e) { toast(e.message, true); }
-        setBtnBusy(ins, false);
-        await pullTunnel();
+        const span = ins.querySelector('span');
+        let secs = 0;
+        const timer = setInterval(() => {
+          secs++;
+          if (span) span.textContent = `下 载 中 ${secs}s ...`;
+        }, 1000);
+        try {
+          await api('POST', '/api/tunnel/install');
+          toast('隧道组件已安装 · 正在开启隧道…');
+          await startTunnelFlow();
+        } catch (e) {
+          toast(e.message, true);
+          setBtnBusy(ins, false);
+          await pullTunnel();
+        } finally {
+          clearInterval(timer);
+        }
       };
       bar.appendChild(ins);
     } else if (t.running) {
@@ -1783,21 +1796,7 @@ async function renderNetwork(c) {
       const start = el('button', 'btn btn-accent', '开启隧道');
       start.onclick = async () => {
         setBtnBusy(start, true, '申 请 中 ...');
-        try {
-          drawTunnel(await api('POST', '/api/tunnel/start'));
-          toast('隧道申请已发出 · 地址生成后自动显示');
-          stopPolling();
-          polls = 0;
-          pollTimer = setInterval(async () => {
-            polls++;
-            if (polls > 24 || S.current !== 'network') { stopPolling(); return; }
-            try {
-              const st = await api('GET', '/api/tunnel/status');
-              drawTunnel(st);
-              if (st.url || !st.running) stopPolling();
-            } catch (e) { stopPolling(); }
-          }, 2000);
-        } catch (e) { toast(e.message, true); await pullTunnel(); }
+        await startTunnelFlow();
       };
       bar.appendChild(start);
     }
@@ -1806,6 +1805,26 @@ async function renderNetwork(c) {
     bar.appendChild(rf);
     tun.appendChild(bar);
     tun.appendChild(el('div', 'card-small', '隧道只转发本机回环端口, 无需路由器端口映射; 关闭后临时地址立即失效。'));
+  };
+  const startTunnelFlow = async () => {
+    try {
+      drawTunnel(await api('POST', '/api/tunnel/start'));
+      toast('隧道申请已发出 · 地址生成后自动显示');
+      stopPolling();
+      polls = 0;
+      pollTimer = setInterval(async () => {
+        polls++;
+        if (polls > 45 || S.current !== 'network') { stopPolling(); return; }
+        try {
+          const st = await api('GET', '/api/tunnel/status');
+          drawTunnel(st);
+          if (st.url || !st.running) stopPolling();
+        } catch (e) { stopPolling(); }
+      }, 2000);
+    } catch (e) {
+      toast(e.message, true);
+      await pullTunnel();
+    }
   };
   const pullTunnel = async () => {
     try { drawTunnel(await api('GET', '/api/tunnel/status')); }

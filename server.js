@@ -8,13 +8,14 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 
 const util = require('./core/util');
 const cryptoUtil = require('./core/crypto-util');
 const { Store, DEFAULT_THEME } = require('./core/store');
 const { Auth } = require('./core/auth');
 const { UserStore } = require('./core/userstore');
+const { downloadToFile } = require('./core/downloader');
 const ai = require('./core/ai');
 
 const ROOT = __dirname;
@@ -952,7 +953,8 @@ function startTunnel() {
   if (!bin) throw new Error('未检测到 cloudflared 隧道组件, 请先在本页安装或手动放入 tools/ 目录');
   tunnelState.error = ''; tunnelState.url = ''; tunnelState.exitCode = null;
   tunnelState.startedAt = Date.now(); tunnelState.log = [];
-  const args = ['tunnel', '--url', `http://127.0.0.1:${config.port}`, '--no-autoupdate'];
+  // 部分网络 UDP/QUIC 受限, 固定走 HTTP/2 + IPv4 才能稳定拿到地址
+  const args = ['tunnel', '--url', `http://127.0.0.1:${config.port}`, '--no-autoupdate', '--protocol', 'http2', '--edge-ip-version', '4'];
   const child = spawn(bin, args, { cwd: DATA, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   tunnelState.proc = child;
   tunnelState.running = true;
@@ -1011,34 +1013,6 @@ function stopTunnel() {
   if (child) { try { child.kill(); } catch (e) { /* 忽略 */ } }
 }
 
-function downloadToFile(url, dest, redirects) {
-  redirects = redirects || 0;
-  return new Promise((resolve, reject) => {
-    if (redirects > 6) return reject(new Error('重定向过多'));
-    const mod = url.startsWith('https:') ? require('https') : require('http');
-    const req = mod.get(url, { headers: { 'User-Agent': 'TenSaint73OS' } }, (resp) => {
-      if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
-        resp.resume();
-        return resolve(downloadToFile(new URL(resp.headers.location, url).toString(), dest, redirects + 1));
-      }
-      if (resp.statusCode !== 200) {
-        resp.resume();
-        return reject(new Error('HTTP ' + resp.statusCode));
-      }
-      const tmp = dest + '.part';
-      const out = fs.createWriteStream(tmp);
-      resp.pipe(out);
-      out.on('error', reject);
-      out.on('finish', () => out.close(() => {
-        try { fs.renameSync(tmp, dest); } catch (e) { return reject(e); }
-        resolve();
-      }));
-    });
-    req.on('error', reject);
-    req.setTimeout(60000, () => req.destroy(new Error('下载超时')));
-  });
-}
-
 function cloudflaredAsset() {
   const key = `${process.platform}-${process.arch}`;
   return {
@@ -1071,23 +1045,53 @@ route('POST', '/api/tunnel/stop', async (req, res) => {
   send(res, 200, tunnelStatus());
 });
 
+const CLOUDFLARED_MIRRORS = [
+  (u) => u,
+  (u) => 'https://gh-proxy.com/' + u,
+  (u) => 'https://ghfast.top/' + u,
+  (u) => 'https://ghproxy.net/' + u,
+];
+
 route('POST', '/api/tunnel/install', async (req, res) => {
   if (!requireFeature(res, 'network')) return;
   const asset = cloudflaredAsset();
-  if (!asset || asset.endsWith('.tgz')) {
-    return send(res, 400, { error: `当前平台 ${process.platform}/${process.arch} 请手动安装 cloudflared 后重试` });
+  if (!asset) {
+    return send(res, 400, { error: `当前平台 ${process.platform}/${process.arch} 没有对应的 cloudflared, 请手动安装` });
   }
   util.ensureDir(TUNNEL_DIR);
   const dest = path.join(TUNNEL_DIR, cloudflaredName());
-  const url = `https://github.com/cloudflare/cloudflared/releases/latest/download/${asset}`;
   try {
-    await downloadToFile(url, dest);
-    if (process.platform !== 'win32') fs.chmodSync(dest, 0o755);
-    if (store.unlocked) store.log('info', `已安装 cloudflared 隧道组件 (${asset})`);
-    send(res, 200, { ok: true, binary: dest, bytes: fs.statSync(dest).size });
-  } catch (e) {
-    send(res, 400, { error: '隧道组件下载失败: ' + e.message + ' (可手动下载 cloudflared 放入 tools/ 目录)' });
+    const size = fs.statSync(dest).size;
+    if (size > 1024 * 1024) return send(res, 200, { ok: true, binary: dest, bytes: size, existing: true });
+  } catch (e) { /* 尚未安装, 继续下载 */ }
+  const url = `https://github.com/cloudflare/cloudflared/releases/latest/download/${asset}`;
+  const isTgz = asset.endsWith('.tgz');
+  const archive = path.join(TUNNEL_DIR, asset);
+  const errors = [];
+  for (const mirror of CLOUDFLARED_MIRRORS) {
+    try {
+      await downloadToFile(mirror(url), isTgz ? archive : dest);
+      if (isTgz) {
+        execFileSync('tar', ['-xzf', archive, '-C', TUNNEL_DIR], { timeout: 60000, windowsHide: true });
+        try { fs.unlinkSync(archive); } catch (e) { /* 忽略 */ }
+        if (!fs.existsSync(dest)) throw new Error('压缩包内未找到 cloudflared');
+      }
+      if (process.platform !== 'win32') fs.chmodSync(dest, 0o755);
+      if (process.platform === 'win32') {
+        const sig = execFileSync('powershell', ['-NoProfile', '-Command', `(Get-AuthenticodeSignature -LiteralPath "${dest}").Status`], { encoding: 'utf8', timeout: 20000, windowsHide: true }).trim();
+        if (sig !== 'Valid') throw new Error('签名校验失败 (' + sig + ')');
+      }
+      execFileSync(dest, ['--version'], { timeout: 60000, stdio: 'ignore', windowsHide: true });
+      if (store.unlocked) store.log('info', `已安装 cloudflared 隧道组件 (${asset})`);
+      return send(res, 200, { ok: true, binary: dest, bytes: fs.statSync(dest).size });
+    } catch (e) {
+      errors.push(e.message);
+      for (const f of [dest, dest + '.part', archive, archive + '.part']) {
+        try { fs.unlinkSync(f); } catch (e2) { /* 忽略 */ }
+      }
+    }
   }
+  send(res, 400, { error: '隧道组件下载失败: ' + errors.join(' | ') + ' (可手动下载 cloudflared 放入 tools/ 目录)' });
 });
 
 route('GET', '/api/urls', async (req, res, user) => {

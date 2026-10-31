@@ -65,10 +65,14 @@ Windows 使用 TenSaint73OS-Launcher.exe; Linux / Android(Termux) / iPhone(iSH)
 ------------------------------------------------------------
 · 本机: http://127.0.0.1:7373
 · 远程: 管理员登录 → 网络矩阵 → 隧道控制 → 开启隧道
-    首次使用可点「安装隧道组件」, 自动从 Cloudflare 官方下载 cloudflared。
-    隧道建立后自动生成 https://xxxx.trycloudflare.com 地址,
+    首次使用点一次「安装隧道组件」即可: 官方源不通会自动切换镜像,
+    大文件分段并行下载避免单连接限速; Windows 会校验 Cloudflare 数字签名,
+    装好自检后自动开启并显示地址。
+    Windows / Linux / Android(Termux) / iPhone(iSH) 四平台通用, macOS 也支持。
+    隧道建立后自动生成 https://xxxx.trycloudflare.com 随机地址,
     并写入「网址」板块; 关闭隧道后该地址立即失效。
-· 也可在终端运行 ./run-online.sh 使用命令行隧道。
+· 也可在终端运行 ./run-online.sh 使用命令行隧道 (同样已固定 HTTP/2 + IPv4)。
+· 替换或升级程序文件后, 需完全退出并重新启动平台, 页面才会加载新版本。
 · 绝对不要用路由器端口转发把 7373 明文 HTTP 暴露到公网。
 
 

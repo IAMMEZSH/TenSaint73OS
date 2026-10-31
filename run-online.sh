@@ -33,22 +33,30 @@ fi
 
 # ---------- 1. 依赖与防休眠 ----------
 command -v node >/dev/null 2>&1 || { echo "[!] 缺少 node: pkg install nodejs-lts"; exit 1; }
-command -v cloudflared >/dev/null 2>&1 || { echo "[!] 缺少 cloudflared: pkg install cloudflared"; exit 1; }
+CF=""
+if [ -x ./tools/cloudflared ]; then CF="./tools/cloudflared"; fi
+if [ -z "$CF" ]; then CF="$(command -v cloudflared 2>/dev/null || true)"; fi
+if [ -z "$CF" ]; then
+  echo "[!] 缺少 cloudflared: 打开管理员页面「网络矩阵 → 隧道控制」点“安装隧道组件”, 或 pkg install cloudflared"
+  exit 1
+fi
 termux-wake-lock 2>/dev/null || echo "[!] 拿不到 wakelock (非 Termux 环境?), 请手动关闭 Termux 的电池优化。"
 
 # ---------- 2. 起隧道 ----------
 : > "$TLOG"
+# 部分网络 UDP/QUIC 受限, 快速隧道固定走 HTTP/2 + IPv4 才能稳定拿到地址
+TUN_FLAGS="--no-autoupdate --protocol http2 --edge-ip-version 4"
 if [ -n "${TS_TUNNEL_NAME:-}" ] && [ -f ./data/tunnel.yml ]; then
   # 命名隧道 (有 Cloudflare 账号 + 自己的域名时): 地址固定不变
-  cloudflared tunnel --config ./data/tunnel.yml run "$TS_TUNNEL_NAME" >>"$TLOG" 2>&1 &
+  "$CF" tunnel --config ./data/tunnel.yml --no-autoupdate --protocol http2 run "$TS_TUNNEL_NAME" >>"$TLOG" 2>&1 &
   TUN_PID=$!
   URL="${TS_PUBLIC_URL:-}"
 else
   # 快速隧道 (免账号, 立即可用): 每次重启会换一个随机网址
-  cloudflared tunnel --url "http://localhost:${PORT}" --no-autoupdate >>"$TLOG" 2>&1 &
+  "$CF" tunnel --url "http://localhost:${PORT}" $TUN_FLAGS >>"$TLOG" 2>&1 &
   TUN_PID=$!
   URL=""
-  for _ in $(seq 1 40); do
+  for _ in $(seq 1 60); do
     URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TLOG" | tail -1 || true)
     [ -n "$URL" ] && break
     sleep 1
