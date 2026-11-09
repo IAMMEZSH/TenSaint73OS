@@ -25,7 +25,7 @@ const USERDATA = path.join(DATA, 'users');
 const USER_FILES = path.join(FILES, 'users');
 const PUBLIC = path.join(ROOT, 'public');
 const SYSTEM_NAME = 'TenSaint73OS';
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 
 /* ---------------- 运行环境 (iOS · iSH / 通用 Node) ---------------- */
 const IS_TERMUX = /com\.termux/.test(`${process.env.PREFIX || ''}${process.env.HOME || ''}`);
@@ -189,7 +189,7 @@ function ensureUserSpace(username) {
     const text = [
       `欢迎来到 ${username} 的私有空间`,
       '',
-      '· 这里的文件只有你自己能看到 (管理员在文件仓库里也看不到你的虚拟根目录)。',
+      '· 这里的文件默认只有你自己能看到; 只有管理员在「用户授权」里显式给你开过目录, 该目录才会出现在你的共享视图里。',
       '· 数据库 → 我的数据库: 你可以自由建表、增删改查, 与其他用户互不影响。',
       '· 所有文件和数据库在磁盘上都是 AES-256-GCM 加密的。',
       '· 退出登录请使用左下角 / 顶部电源按钮。',
@@ -329,6 +329,34 @@ const MEMBER_ROUTES = new Set([
   '/api/db/clear', '/api/db/addcol', '/api/db/delcol',
   '/api/fs/list', '/api/fs/download', '/api/fs/mkdir', '/api/fs/upload', '/api/fs/delete',
 ]);
+
+// 共享空间: 管理员在「用户 → 授权」里逐表/逐目录授予 r 或 rw 之后, 会员从这里访问全局资源。
+// 与私有空间是两套东西: 私有空间永远只属于本人, 这里只给显式授权过的部分。
+// 授权在每次请求实时读取, 所以管理员撤销后, 会员的下一个请求就会被拒绝。
+const SHARED_ROUTES = new Set([
+  '/api/shared',
+  '/api/shared/db/tables', '/api/shared/db/table', '/api/shared/db/insert', '/api/shared/db/update', '/api/shared/db/delete',
+  '/api/shared/fs/list', '/api/shared/fs/download',
+  '/api/shared/fs/upload', '/api/shared/fs/mkdir', '/api/shared/fs/delete',
+]);
+
+// 会员私有空间的物理目录名。任何授权（包括根目录 ""）都不得把它暴露出去:
+// 一次误勾选就会让被授权的会员读到所有人的私有文件。
+const PRIVATE_DIR = 'users';
+
+// 先归一化再判权限: 只判首段的写法挡不住 docs/../users/alice —— 归一化后就变成 users/alice。
+function sharedRel(raw) {
+  const s = String(raw || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!s) return '';
+  const norm = path.posix.normalize(s);
+  return norm === '.' ? '' : norm;
+}
+
+function sharedDenied(rel) {
+  if (!rel) return false;
+  const parts = rel.split('/');
+  return parts[0] === PRIVATE_DIR || parts.indexOf('..') >= 0 || rel.indexOf('\0') >= 0;
+}
 
 function isAdmin(user) { return !!user && user.role === 'admin'; }
 
@@ -662,7 +690,10 @@ function listDirs() {
     const abs = util.safeJoin(FILES, rel);
     if (!abs || !fs.existsSync(abs)) return;
     for (const f of fs.readdirSync(abs)) {
-      if (!fs.statSync(path.join(abs, f)).isDirectory()) continue;
+      // 会员私有空间不可授权 (共享接口在读取层也会拒绝), 所以不把它列进可授权目录
+      if (!rel && f === PRIVATE_DIR) continue;
+      const st = fs.lstatSync(path.join(abs, f));
+      if (st.isSymbolicLink() || !st.isDirectory()) continue;
       const sub = rel ? rel + '/' + f : f;
       out.push(sub);
       if (out.length < 500) walk(sub);
@@ -681,6 +712,10 @@ route('GET', '/api/grants', async (req, res, user) => {
 
 route('POST', '/api/grants/set', async (req, res, user) => {
   const { username, grants } = await readBody(req);
+  // 私有空间目录即便被写进授权也不生效 (共享接口在读取层拒绝), 这里直接丢掉, 免得界面显示一条假授权
+  if (grants && grants.files && typeof grants.files === 'object') {
+    for (const k of Object.keys(grants.files)) if (sharedDenied(sharedRel(k))) delete grants.files[k];
+  }
   const g = auth.setGrants(String(username), grants);
   const n = Object.keys(g.tables).length + Object.keys(g.files).length;
   store.log('warn', `设置用户 ${username} 的数据授权 (${n} 项)`);
@@ -786,6 +821,157 @@ route('POST', '/api/me/delete', async (req, res, user) => {
   try { fs.rmSync(path.join(USERDATA, util.sha256(user.username).slice(0, 32) + '.db'), { force: true }); } catch (e) { /* 已不存在 */ }
   if (store.unlocked) store.log('warn', `会员 ${user.username} 永久注销账号, 私有数据库与文件已销毁`);
   send(res, 200, { ok: true, deleted: true });
+});
+
+/* ---------------- 共享空间 (会员按显式授权访问全局资源) ---------------- */
+// 管理员未解锁时全局库和文件密钥都在管理员密码后面, 因此共享数据不可用——如实返回 423,
+// 不退回成空列表, 否则界面会把"暂时打不开"显示成"管理员什么都没给你"。
+function sharedTableLevel(user, name) {
+  return auth.getGrants(user.username).tables[name] || null;
+}
+
+function sharedTableGate(res, user, name, needWrite) {
+  if (!store.unlocked) { send(res, 423, { error: '所有者尚未登录解锁, 共享数据暂时不可用' }); return null; }
+  if (!store.doc.tables[name]) { send(res, 404, { error: '表不存在: ' + name }); return null; }
+  const lvl = sharedTableLevel(user, name);
+  if (!lvl) { send(res, 403, { error: '数据表 [' + name + '] 未授权给你' }); return null; }
+  if (needWrite && lvl !== 'rw') { send(res, 403, { error: '数据表 [' + name + '] 对你是只读' }); return null; }
+  return lvl;
+}
+
+function sharedFsGate(res, user, rawRel, needWrite) {
+  if (!store.unlocked) { send(res, 423, { error: '所有者尚未登录解锁, 共享数据暂时不可用' }); return null; }
+  const rel = sharedRel(rawRel);
+  if (sharedDenied(rel)) { send(res, 403, { error: '该路径不在共享范围内' }); return null; }
+  if (!auth.hasFileAccess(user.username, rel, needWrite)) {
+    send(res, 403, { error: needWrite ? '该目录对你是只读或未授权' : '该目录未授权给你' });
+    return null;
+  }
+  const abs = util.safeJoin(FILES, rel);
+  if (!abs) { send(res, 400, { error: '非法路径' }); return null; }
+  return abs;
+}
+
+route('GET', '/api/shared', async (req, res, user) => {
+  if (!store.unlocked) return send(res, 200, { unlocked: false, tables: [], dirs: [] });
+  const g = auth.getGrants(user.username);
+  const tables = Object.keys(g.tables).filter(n => !!store.doc.tables[n]).map(n => {
+    const t = store.doc.tables[n];
+    return { name: n, columns: t.columns, count: t.rows.length, level: g.tables[n] };
+  });
+  const dirs = Object.keys(g.files).filter(p => !sharedDenied(sharedRel(p)))
+    .map(p => ({ path: sharedRel(p), level: g.files[p] }));
+  send(res, 200, { unlocked: true, tables, dirs });
+});
+
+route('GET', '/api/shared/db/tables', async (req, res, user) => {
+  if (!store.unlocked) return send(res, 423, { error: '所有者尚未登录解锁, 共享数据暂时不可用' });
+  const g = auth.getGrants(user.username);
+  const tables = Object.keys(g.tables).filter(n => !!store.doc.tables[n]).map(n => ({
+    name: n, columns: store.doc.tables[n].columns, count: store.doc.tables[n].rows.length, level: g.tables[n],
+  }));
+  send(res, 200, { tables });
+});
+
+route('GET', '/api/shared/db/table', async (req, res, user) => {
+  const q = new URLSearchParams(req.url.split('?')[1] || '');
+  const name = q.get('name') || '';
+  if (!sharedTableGate(res, user, name, false)) return;
+  send(res, 200, store.getTable(name));
+});
+
+route('POST', '/api/shared/db/insert', async (req, res, user) => {
+  const { table, row } = await readBody(req);
+  if (!sharedTableGate(res, user, table, true)) return;
+  const r = store.insert(table, row || {});
+  store.log('info', `会员 ${user.username} 向共享表 [${table}] 插入 1 行`);
+  send(res, 200, { ok: true, row: r });
+});
+
+route('POST', '/api/shared/db/update', async (req, res, user) => {
+  const { table, id, patch } = await readBody(req);
+  if (!sharedTableGate(res, user, table, true)) return;
+  const r = store.update(table, id, patch || {});
+  store.log('info', `会员 ${user.username} 更新共享表 [${table}] 1 行`);
+  send(res, 200, { ok: true, row: r });
+});
+
+route('POST', '/api/shared/db/delete', async (req, res, user) => {
+  const { table, id } = await readBody(req);
+  if (!sharedTableGate(res, user, table, true)) return;
+  store.remove(table, id);
+  store.log('warn', `会员 ${user.username} 删除共享表 [${table}] 1 行`);
+  send(res, 200, { ok: true });
+});
+
+route('GET', '/api/shared/fs/list', async (req, res, user) => {
+  const q = new URLSearchParams(req.url.split('?')[1] || '');
+  const rel = sharedRel(q.get('path') || '');
+  const abs = sharedFsGate(res, user, rel, false);
+  if (!abs) return;
+  if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) return send(res, 404, { error: '目录不存在' });
+  // 根目录下永远隐藏私有空间目录, 即便管理员把根目录 "" 授权出去
+  const items = fs.readdirSync(abs)
+    .filter(f => !(rel === '' && f === PRIVATE_DIR))
+    .map(f => {
+      const full = path.join(abs, f);
+      const st = fs.lstatSync(full);
+      // 符号链接可以绕开 safeJoin 的字符级检查, 一律不当作目录/文件展示
+      return { name: f, dir: !st.isSymbolicLink() && st.isDirectory(), size: st.size, mtime: st.mtimeMs, link: st.isSymbolicLink() };
+    }).sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name));
+  send(res, 200, { path: rel, items, scope: 'shared' });
+});
+
+route('GET', '/api/shared/fs/download', async (req, res, user) => {
+  const q = new URLSearchParams(req.url.split('?')[1] || '');
+  const abs = sharedFsGate(res, user, q.get('path') || '', false);
+  if (!abs) return;
+  if (!fs.existsSync(abs) || !fs.lstatSync(abs).isFile()) return send(res, 404, { error: '文件不存在' });
+  const raw = fs.readFileSync(abs);
+  let out = raw;
+  if (isSealed(raw)) {
+    try { out = unsealBytes(raw); }
+    catch (e) { return send(res, 500, { error: '文件解密失败: install.salt 与该文件不匹配' }); }
+  }
+  res.writeHead(200, Object.assign({
+    'Content-Type': 'application/octet-stream',
+    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(abs))}`,
+  }, SEC_HEADERS));
+  res.end(out);
+});
+
+route('POST', '/api/shared/fs/upload', async (req, res, user) => {
+  const { path: rel, name, data } = await readBody(req);
+  const clean = String(name || 'file').replace(/[\\/:*?"<>|]/g, '_');
+  if (!clean || clean === '.' || clean === '..') return send(res, 400, { error: '非法文件名' });
+  const abs = sharedFsGate(res, user, path.join(sharedRel(rel), clean), true);
+  if (!abs) return;
+  const plain = Buffer.from(String(data || ''), 'base64');
+  fs.writeFileSync(abs, sealBytes(plain));
+  store.log('info', `会员 ${user.username} 向共享目录上传 ${clean} (${Math.round(plain.length / 1024)}KB)`);
+  send(res, 200, { ok: true });
+});
+
+route('POST', '/api/shared/fs/mkdir', async (req, res, user) => {
+  const { path: rel, name } = await readBody(req);
+  const clean = String(name || '').replace(/[\\/:*?"<>|]/g, '_');
+  if (!clean || clean === '.' || clean === '..') return send(res, 400, { error: '非法文件夹名' });
+  const abs = sharedFsGate(res, user, path.join(sharedRel(rel), clean), true);
+  if (!abs) return;
+  fs.mkdirSync(abs, { recursive: true });
+  store.log('info', `会员 ${user.username} 在共享目录新建文件夹 ${clean}`);
+  send(res, 200, { ok: true });
+});
+
+route('POST', '/api/shared/fs/delete', async (req, res, user) => {
+  const { path: rel } = await readBody(req);
+  const abs = sharedFsGate(res, user, rel, true);
+  if (!abs) return;
+  if (abs === util.safeJoin(FILES, '')) return send(res, 400, { error: '不能删除共享根目录' });
+  if (!fs.existsSync(abs)) return send(res, 404, { error: '不存在' });
+  fs.rmSync(abs, { recursive: true, force: true });
+  store.log('warn', `会员 ${user.username} 删除共享路径 ${sharedRel(rel)}`);
+  send(res, 200, { ok: true });
 });
 
 // ---- 功能模块 ----
@@ -1203,7 +1389,10 @@ async function handleApi(req, res, pathname) {
 
   const user = requireAuth(req, res);
   if (!user) return;
-  if (!isAdmin(user) && !MEMBER_ROUTES.has(pathname)) {
+  if (SHARED_ROUTES.has(pathname)) {
+    // 共享视图只服务受限用户: 管理员本来就能直接读全局库与整棵文件树
+    if (isAdmin(user)) return send(res, 403, { error: '共享视图面向受限用户; 最高权限账号请直接使用管理面板' });
+  } else if (!isAdmin(user) && !MEMBER_ROUTES.has(pathname)) {
     return send(res, 403, { error: '权限不足: 该内容仅最高权限账号可见' });
   }
   // 会员使用自己的加密库, 不依赖管理员是否已解锁系统库

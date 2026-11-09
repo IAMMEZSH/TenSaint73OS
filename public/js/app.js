@@ -718,7 +718,6 @@ function doLogout(silent) {
   S.memberTab = 'overview';
   S.tick = {};
   S.palette = null;
-  dbCurrentTable = null;
   applyTheme(DEFAULT_THEME);
   if (!silent) toast('会话已注销 · 访问令牌已销毁');
   showLoginScreen();
@@ -726,12 +725,18 @@ function doLogout(silent) {
 
 async function enterAdmin(st, afterLogin) {
   if (!st) st = await api('GET', '/api/state');
+  else if (!st.features) {
+    // 登录接口只返回令牌; 功能模块清单在 /api/state 里, 不补取一次侧栏会是空的
+    try {
+      const s2 = await api('GET', '/api/state');
+      if (s2 && s2.features) st = Object.assign({}, st, s2);
+    } catch (e) { /* 取不到就沿用登录响应 */ }
+  }
   S.role = 'admin';
   S.username = st.username;
   S.nodeId = st.nodeId || S.nodeId || '';
   S.my = null;
   S.current = 'dashboard';
-  dbCurrentTable = null;
   localStorage.setItem('ts73_last_user', S.username);
   const boot = $('#boot-screen');
   if (boot) { boot.classList.add('hidden'); boot.style.display = 'none'; }
@@ -745,7 +750,7 @@ async function enterAdmin(st, afterLogin) {
   const sideUser = $('#side-user');
   if (sideUser) sideUser.innerHTML = `<b>${esc(S.username)}</b><span>ROOT ADMINISTRATOR</span>`;
   const ver = $('#side-ver');
-  if (ver) ver.textContent = 'OS v' + (st.version || '1.3.0') + ' · ADMIN';
+  if (ver) ver.textContent = 'OS v' + (st.version || '1.4.0') + ' · ADMIN';
   await buildSidebar();
   navigate('dashboard');
   startTicker();
@@ -757,7 +762,6 @@ async function enterMember(st) {
   S.username = st.username;
   S.nodeId = st.nodeId || '';
   S.memberTab = 'overview';
-  dbCurrentTable = null;
   localStorage.setItem('ts73_last_user', S.username);
   const boot = $('#boot-screen');
   if (boot) { boot.classList.add('hidden'); boot.style.display = 'none'; }
@@ -845,6 +849,7 @@ const MEMBER_MODULES = {
   overview: { title: '指挥舱', icon: '◈', render: renderMemberOverview },
   files: { title: '我的文件', icon: '▤', render: renderMemberFiles },
   database: { title: '我的数据库', icon: '⛁', render: renderMemberDatabase },
+  shared: { title: '共享空间', icon: '⇄', render: renderMemberShared },
   account: { title: '账户安全', icon: '⬡', render: renderMemberAccount },
 };
 
@@ -1109,15 +1114,17 @@ function renderAI(c) {
   input.focus();
 }
 
-/* ---- 数据库 (管理员 / 会员共用) ---- */
-let dbCurrentTable = null;
+/* ---- 数据库 (管理员 / 会员 / 共享视图共用) ---- */
 
 async function renderDbPanel(c, opts) {
+  opts = opts || {};
+  const B = opts.apiBase || '/api/db';
+  let curT = null;
   c.innerHTML = '';
   const bar = el('div', 'file-toolbar');
   const addBtn = el('button', 'btn', '＋ 新建数据表');
   const rf = el('button', 'btn btn-accent', '⟳ 刷新');
-  bar.appendChild(addBtn);
+  if (opts.canCreate !== false) bar.appendChild(addBtn);
   bar.appendChild(rf);
   bar.appendChild(el('span', 'crumb', opts.scope || ''));
   c.appendChild(bar);
@@ -1137,7 +1144,7 @@ async function renderDbPanel(c, opts) {
     body.appendChild(formRow('表名', name));
     body.appendChild(formRow('列 (逗号分隔)', cols));
     openModal('新建数据表', body, async () => {
-      await api('POST', '/api/db/create', { name: name.value, columns: cols.value.split(/[,，]/).map(s => s.trim()).filter(Boolean) });
+      await api('POST', B + '/create', { name: name.value, columns: cols.value.split(/[,，]/).map(s => s.trim()).filter(Boolean) });
       toast('数据表已创建');
       if (opts.onChange) opts.onChange();
       refresh();
@@ -1146,18 +1153,19 @@ async function renderDbPanel(c, opts) {
 
   async function refresh() {
     let d;
-    try { d = await api('GET', '/api/db/tables'); }
+    try { d = await api('GET', B + '/tables'); }
     catch (e) { left.innerHTML = ''; left.appendChild(el('div', 'empty-tip', esc(e.message))); return; }
-    if (dbCurrentTable && !d.tables.some(t => t.name === dbCurrentTable)) dbCurrentTable = null;
-    if (!dbCurrentTable && d.tables.length) dbCurrentTable = d.tables[0].name;
+    if (curT && !d.tables.some(t => t.name === curT)) curT = null;
+    if (!curT && d.tables.length) curT = d.tables[0].name;
     left.innerHTML = '<div class="card-title">数据表 (' + d.tables.length + ')</div>';
     if (!d.tables.length) left.appendChild(el('div', 'empty-tip', '暂无数据表'));
     for (const t of d.tables) {
-      const item = el('div', 'nav-item' + (dbCurrentTable === t.name ? ' active' : ''), `<span class="nav-icon">⛁</span>${esc(t.name)}<span style="margin-left:auto;color:var(--dim);font-size:9px">${t.count}</span>`);
-      item.onclick = () => { dbCurrentTable = t.name; refresh(); };
+      const lv = t.level === 'r' ? ' · 只读' : '';
+      const item = el('div', 'nav-item' + (curT === t.name ? ' active' : ''), `<span class="nav-icon">⛁</span>${esc(t.name)}<span style="margin-left:auto;color:var(--dim);font-size:9px">${t.count}${lv}</span>`);
+      item.onclick = () => { curT = t.name; refresh(); };
       left.appendChild(item);
     }
-    if (dbCurrentTable) await renderTable(right, dbCurrentTable, refresh, opts);
+    if (curT) await renderTable(right, curT, refresh, opts);
     else right.innerHTML = '<div class="empty-tip">← 选择左侧数据表, 或新建一张</div>';
   }
   rf.onclick = refresh;
@@ -1165,21 +1173,26 @@ async function renderDbPanel(c, opts) {
 }
 
 async function renderTable(box, name, refresh, opts) {
+  opts = opts || {};
+  const B = opts.apiBase || '/api/db';
+  const writable = opts.canWriteTable ? !!opts.canWriteTable(name) : true;
+  // 共享库只开放行级读写, 建表/删表/加列属于管理员的结构权限
+  const canStruct = opts.canStructure !== undefined ? !!opts.canStructure : writable;
   let t;
-  try { t = await api('GET', '/api/db/table?name=' + encodeURIComponent(name)); }
+  try { t = await api('GET', B + '/table?name=' + encodeURIComponent(name)); }
   catch (e) { box.innerHTML = ''; box.appendChild(el('div', 'empty-tip', esc(e.message))); return; }
   box.innerHTML = '';
   const head = el('div', 'file-toolbar');
-  head.appendChild(el('span', 'crumb', `表 <b style="color:var(--primary)">${esc(t.name)}</b> · ${t.count} 行 · ${t.columns.length} 列`));
+  head.appendChild(el('span', 'crumb', `表 <b style="color:var(--primary)">${esc(t.name)}</b> · ${t.count} 行 · ${t.columns.length} 列${writable ? '' : ' · 只读授权'}`));
   const sp = el('span'); sp.style.flex = '1'; head.appendChild(sp);
   const addCol = el('button', 'btn btn-sm', '＋列');
   addCol.onclick = () => {
     const col = inp('', '列名');
     const body = el('div'); body.appendChild(formRow('新列名', col));
     openModal('添加列 [' + t.name + ']', body, async () => {
-      await api('POST', '/api/db/addcol', { table: t.name, col: col.value });
+      await api('POST', B + '/addcol', { table: t.name, col: col.value });
       toast('已添加');
-      if (opts && opts.onChange) opts.onChange();
+      if (opts.onChange) opts.onChange();
       refresh();
     }, '添加');
   };
@@ -1187,64 +1200,68 @@ async function renderTable(box, name, refresh, opts) {
   addRow.onclick = () => editRowModal(t, null, refresh, opts);
   const clear = el('button', 'btn btn-sm btn-danger', '清空');
   clear.onclick = () => confirmBox(`清空表 [${t.name}] 的全部 ${t.count} 行?`, async () => {
-    await api('POST', '/api/db/clear', { table: t.name });
+    await api('POST', B + '/clear', { table: t.name });
     toast('已清空');
-    if (opts && opts.onChange) opts.onChange();
+    if (opts.onChange) opts.onChange();
     refresh();
   });
   const drop = el('button', 'btn btn-sm btn-danger', '删表');
   drop.onclick = () => confirmBox(`永久删除表 [${t.name}]? 不可恢复。`, async () => {
-    await api('POST', '/api/db/drop', { name: t.name });
-    dbCurrentTable = null;
+    await api('POST', B + '/drop', { name: t.name });
     toast('表已删除');
-    if (opts && opts.onChange) opts.onChange();
+    if (opts.onChange) opts.onChange();
     refresh();
   });
-  head.appendChild(addCol);
-  head.appendChild(addRow);
-  head.appendChild(clear);
-  head.appendChild(drop);
+  if (canStruct) {
+    head.appendChild(addCol);
+    head.appendChild(clear);
+    head.appendChild(drop);
+  }
+  if (writable) head.appendChild(addRow);
   box.appendChild(head);
 
   if (!t.rows.length) {
-    box.appendChild(el('div', 'empty-tip', '空表 — 点击 "＋行" 写入第一条数据'));
+    box.appendChild(el('div', 'empty-tip', writable ? '空表 — 点击 "＋行" 写入第一条数据' : '空表'));
     return;
   }
   const tbl = el('table', 'tbl');
   const trh = el('tr');
   t.columns.forEach(c2 => {
-    const th = el('th', '', esc(c2) + ' <span style="cursor:pointer;color:var(--danger);margin-left:4px" title="删除此列">×</span>');
-    th.querySelector('span').onclick = () => confirmBox(`删除列 [${c2}]?`, async () => {
-      await api('POST', '/api/db/delcol', { table: t.name, col: c2 });
+    const th = el('th', '', esc(c2) + (canStruct ? ' <span style="cursor:pointer;color:var(--danger);margin-left:4px" title="删除此列">×</span>' : ''));
+    if (canStruct) th.querySelector('span').onclick = () => confirmBox(`删除列 [${c2}]?`, async () => {
+      await api('POST', B + '/delcol', { table: t.name, col: c2 });
       toast('列已删除');
-      if (opts && opts.onChange) opts.onChange();
+      if (opts.onChange) opts.onChange();
       refresh();
     });
     trh.appendChild(th);
   });
-  trh.appendChild(el('th', '', '操作'));
+  if (writable) trh.appendChild(el('th', '', '操作'));
   tbl.appendChild(trh);
   for (const row of t.rows) {
     const tr = el('tr');
     t.columns.forEach(c2 => tr.appendChild(el('td', '', esc(row[c2]))));
-    const td = el('td', 'row-actions');
-    const bE = el('button', 'btn btn-sm', '改');
-    bE.onclick = () => editRowModal(t, row, refresh, opts);
-    const bD = el('button', 'btn btn-sm btn-danger', '删');
-    bD.onclick = () => confirmBox('删除该行?', async () => {
-      await api('POST', '/api/db/delete', { table: t.name, id: row.id });
-      if (opts && opts.onChange) opts.onChange();
-      refresh();
-    });
-    td.appendChild(bE);
-    td.appendChild(bD);
-    tr.appendChild(td);
+    if (writable) {
+      const td = el('td', 'row-actions');
+      const bE = el('button', 'btn btn-sm', '改');
+      bE.onclick = () => editRowModal(t, row, refresh, opts);
+      const bD = el('button', 'btn btn-sm btn-danger', '删');
+      bD.onclick = () => confirmBox('删除该行?', async () => {
+        await api('POST', B + '/delete', { table: t.name, id: row.id });
+        if (opts.onChange) opts.onChange();
+        refresh();
+      });
+      td.appendChild(bE);
+      td.appendChild(bD);
+      tr.appendChild(td);
+    }
     tbl.appendChild(tr);
   }
   box.appendChild(tbl);
 }
 
 function editRowModal(t, row, refresh, opts) {
+  const B = (opts && opts.apiBase) || '/api/db';
   const inputs = {};
   const body = el('div');
   for (const c2 of t.columns) {
@@ -1255,8 +1272,8 @@ function editRowModal(t, row, refresh, opts) {
   openModal((row ? '修改' : '添加') + '数据 [' + t.name + ']', body, async () => {
     const data = {};
     for (const c2 of t.columns) data[c2] = inputs[c2].value;
-    if (row) await api('POST', '/api/db/update', { table: t.name, id: row.id, patch: data });
-    else await api('POST', '/api/db/insert', { table: t.name, row: data });
+    if (row) await api('POST', B + '/update', { table: t.name, id: row.id, patch: data });
+    else await api('POST', B + '/insert', { table: t.name, row: data });
     toast('已保存');
     if (opts && opts.onChange) opts.onChange();
     refresh();
@@ -1269,6 +1286,9 @@ function renderDatabase(c) {
 
 /* ---- 文件仓库 (管理员 / 会员共用) ---- */
 async function renderFileBrowser(c, opts) {
+  opts = opts || {};
+  const FB = opts.fsBase || '/api/fs';
+  const canWrite = opts.writableAt || (() => true);
   c.innerHTML = '';
   const bar = el('div', 'file-toolbar');
   const up = el('button', 'btn', '⬆ 上传文件');
@@ -1291,7 +1311,7 @@ async function renderFileBrowser(c, opts) {
   hidden.style.display = 'none';
   c.appendChild(hidden);
 
-  let cur = '';
+  let cur = opts.startPath || '';
   let uploading = false;
 
   up.onclick = () => hidden.click();
@@ -1303,7 +1323,7 @@ async function renderFileBrowser(c, opts) {
     try {
       for (const f of files) {
         const buf = await f.arrayBuffer();
-        await api('POST', '/api/fs/upload', { path: cur, name: f.name, data: b64(buf) });
+        await api('POST', FB + '/upload', { path: cur, name: f.name, data: b64(buf) });
         toast('已加密上传: ' + f.name);
       }
       if (files.length && opts.onChange) opts.onChange();
@@ -1319,7 +1339,7 @@ async function renderFileBrowser(c, opts) {
     const body = el('div');
     body.appendChild(formRow('名称', name));
     openModal('新建文件夹', body, async () => {
-      await api('POST', '/api/fs/mkdir', { path: cur, name: name.value });
+      await api('POST', FB + '/mkdir', { path: cur, name: name.value });
       toast('文件夹已创建');
       if (opts.onChange) opts.onChange();
       refresh();
@@ -1328,7 +1348,7 @@ async function renderFileBrowser(c, opts) {
   rf.onclick = () => refresh();
 
   async function download(path, name) {
-    const r = await fetch('/api/fs/download?path=' + encodeURIComponent(path), { headers: { Authorization: 'Bearer ' + S.token } });
+    const r = await fetch(FB + '/download?path=' + encodeURIComponent(path), { headers: { Authorization: 'Bearer ' + S.token } });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
       throw new Error(d.error || ('HTTP ' + r.status));
@@ -1345,29 +1365,32 @@ async function renderFileBrowser(c, opts) {
   }
 
   async function refresh() {
-    crumb.innerHTML = `位置: <b data-p="">${esc(opts.rootLabel || '根目录')}</b>`;
-    if (cur) {
-      let acc = '';
-      cur.split('/').filter(Boolean).forEach(s => {
-        acc += (acc ? '/' : '') + s;
-        crumb.innerHTML += ' / <b data-p="' + esc(acc) + '">' + esc(s) + '</b>';
-      });
-    }
+    const root = opts.startPath || '';
+    crumb.innerHTML = `位置: <b data-p="${esc(root)}">${esc(opts.rootLabel || '根目录')}</b>`;
+    let acc = root;
+    const baseLen = root.split('/').filter(Boolean).length;
+    cur.split('/').filter(Boolean).forEach((s, i) => {
+      if (i < baseLen) return;
+      acc = acc ? acc + '/' + s : s;
+      crumb.innerHTML += ' / <b data-p="' + esc(acc) + '">' + esc(s) + '</b>';
+    });
     crumb.querySelectorAll('b').forEach(b => b.onclick = () => { cur = b.dataset.p || ''; refresh(); });
+    up.style.display = canWrite(cur) ? '' : 'none';
+    mk.style.display = canWrite(cur) ? '' : 'none';
     let d;
-    try { d = await api('GET', '/api/fs/list?path=' + encodeURIComponent(cur)); }
+    try { d = await api('GET', FB + '/list?path=' + encodeURIComponent(cur)); }
     catch (e) { grid.innerHTML = ''; grid.appendChild(el('div', 'empty-tip', esc(e.message))); return; }
     grid.innerHTML = '';
-    if (!d.items.length) grid.appendChild(el('div', 'empty-tip', '空目录 — 上传文件或新建文件夹'));
+    if (!d.items.length) grid.appendChild(el('div', 'empty-tip', canWrite(cur) ? '空目录 — 上传文件或新建文件夹' : '空目录 (只读)'))
     for (const it of d.items) {
       const p = cur ? cur + '/' + it.name : it.name;
       const item = el('div', 'file-item');
-      item.innerHTML = `<div class="fi-icon">${it.dir ? '▤' : '◇'}</div><div class="fi-name">${esc(it.name)}</div><div class="fi-size">${it.dir ? 'FOLDER' : fmtSize(it.size)}</div>`;
+      item.innerHTML = `<div class="fi-icon">${it.link ? '⛓' : it.dir ? '▤' : '◇'}</div><div class="fi-name">${esc(it.name)}</div><div class="fi-size">${it.link ? 'LINK' : it.dir ? 'FOLDER' : fmtSize(it.size)}</div>`;
       const acts = el('div', 'row-actions');
 
       if (it.dir) {
         item.onclick = () => { cur = p; refresh(); };
-      } else {
+      } else if (!it.link) {
         item.onclick = () => {
           $$('.file-item').forEach(x => x.classList.remove('selected'));
           item.classList.add('selected');
@@ -1380,18 +1403,20 @@ async function renderFileBrowser(c, opts) {
         acts.appendChild(dl);
       }
 
-      const del = el('button', 'btn btn-sm btn-danger', '删除');
-      del.onclick = e => {
-        e.stopPropagation();
-        armOnce(del, '删除', async () => {
-          const note = (opts.admin && (p === 'users' || p.startsWith('users/'))) ? ' 这会删除会员私有文件!' : '';
-          await api('POST', '/api/fs/delete', { path: p });
-          toast('已删除' + note);
-          if (opts.onChange) opts.onChange();
-          refresh();
-        });
-      };
-      acts.appendChild(del);
+      if (canWrite(p)) {
+        const del = el('button', 'btn btn-sm btn-danger', '删除');
+        del.onclick = e => {
+          e.stopPropagation();
+          armOnce(del, '删除', async () => {
+            const note = (opts.admin && (p === 'users' || p.startsWith('users/'))) ? ' 这会删除会员私有文件!' : '';
+            await api('POST', FB + '/delete', { path: p });
+            toast('已删除' + note);
+            if (opts.onChange) opts.onChange();
+            refresh();
+          });
+        };
+        acts.appendChild(del);
+      }
       item.appendChild(acts);
       grid.appendChild(item);
     }
@@ -1460,6 +1485,45 @@ async function renderUsers(c) {
     openModal('私有空间 · ' + username, body, async () => true, '关闭');
   }
 
+  async function openGrants(username) {
+    let d;
+    try { d = await api('GET', '/api/grants'); }
+    catch (e) { toast(e.message, true); return; }
+    const me = (d.users || []).find(u => u.username === username);
+    const curT = (me && me.grants && me.grants.tables) || {};
+    const curF = (me && me.grants && me.grants.files) || {};
+    const body = el('div');
+    const mkSel = (v) => {
+      const s = el('select', 'inp');
+      s.innerHTML = '<option value="">不授权</option><option value="r">只读</option><option value="rw">读写</option>';
+      s.value = v || '';
+      return s;
+    };
+    const tSel = {}, fSel = {};
+    body.appendChild(el('div', 'section-title', '数据表 (全局加密库)'));
+    if (!d.tables.length) body.appendChild(el('div', 'empty-tip', '全局库还没有数据表'));
+    for (const n of d.tables) {
+      const s = mkSel(curT[n]);
+      tSel[n] = s;
+      body.appendChild(formRow(n, s));
+    }
+    body.appendChild(el('div', 'section-title', '目录 (授予父目录即含整棵子树)'));
+    if (!d.dirs.length) body.appendChild(el('div', 'empty-tip', '文件仓库还没有子目录'));
+    for (const p of d.dirs) {
+      const s = mkSel(curF[p]);
+      fSel[p] = s;
+      body.appendChild(formRow(p, s));
+    }
+    body.appendChild(el('div', 'card-small', `保存后 [${username}] 的下一次请求立即生效, 收回同样即时失效。会员私有空间不在可授权范围内, 无论怎样勾选都不会被共享。`));
+    openModal('数据授权 · ' + username, body, async () => {
+      const grants = { tables: {}, files: {} };
+      for (const n of d.tables) if (tSel[n].value) grants.tables[n] = tSel[n].value;
+      for (const p of d.dirs) if (fSel[p].value) grants.files[p] = fSel[p].value;
+      await api('POST', '/api/grants/set', { username, grants });
+      toast('授权已保存');
+    }, '保存');
+  }
+
   async function refresh() {
     let d;
     try { d = await api('GET', '/api/users'); } catch (e) { box.innerHTML = ''; box.appendChild(el('div', 'empty-tip', esc(e.message))); return; }
@@ -1476,6 +1540,9 @@ async function renderUsers(c) {
         const space = el('button', 'btn btn-sm btn-accent', '空间');
         space.onclick = () => openSpace(u.username);
         td.appendChild(space);
+        const grants = el('button', 'btn btn-sm', '授权');
+        grants.onclick = () => openGrants(u.username);
+        td.appendChild(grants);
       }
       const pw = el('button', 'btn btn-sm', '改密');
       pw.onclick = () => {
@@ -2049,7 +2116,7 @@ async function renderSettings(c) {
 async function renderAbout(c) {
   c.innerHTML = '';
   let st;
-  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.3.0' }; }
+  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.4.0' }; }
   const card = el('div', 'card');
   card.innerHTML = `<div style="text-align:center;padding:18px 8px">
     <div style="position:relative;width:130px;height:130px;margin:0 auto">
@@ -2058,7 +2125,7 @@ async function renderAbout(c) {
     <h2 style="margin-top:18px;letter-spacing:5px;color:var(--primary)">TENSAINT<span style="color:var(--text)">73</span>OS</h2>
     <div style="font-size:9px;color:var(--dim);letter-spacing:3px;margin-top:7px">圣钥协议 · SANCTUM KEY PROTOCOL</div>
     <div class="mono-list" style="text-align:left;margin-top:24px;line-height:2.2">
-      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.3.0')}</span></div>
+      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.4.0')}</span></div>
       <div><span class="k">数据库加密</span><span class="v">AES-256-GCM · 管理员库 / 会员库双轨</span></div>
       <div><span class="k">权限模型</span><span class="v">管理员全局 · 会员仅见自己的文件与数据表</span></div>
       <div><span class="k">文件隔离</span><span class="v">每个账号独立虚拟根目录, 接口层强制隔离</span></div>
@@ -2171,6 +2238,119 @@ function renderMemberFiles(c) {
 
 function renderMemberDatabase(c) {
   return renderDbPanel(c, { scope: 'PRIVATE ENCRYPTED DB', onChange: refreshMemberMy });
+}
+
+/* ---- 会员 · 共享空间 (管理员显式授权的全局表与目录) ---- */
+async function renderMemberShared(c) {
+  c.innerHTML = '';
+  const bar = el('div', 'file-toolbar');
+  const rf = el('button', 'btn btn-accent', '⟳ 刷新');
+  bar.appendChild(rf);
+  bar.appendChild(el('span', 'crumb', 'SHARED ACCESS · 由管理员显式授权, 收回即时生效'));
+  c.appendChild(bar);
+  const mount = el('div');
+  c.appendChild(mount);
+
+  async function refresh() {
+    mount.innerHTML = '';
+    let d;
+    try { d = await api('GET', '/api/shared'); }
+    catch (e) { mount.appendChild(el('div', 'empty-tip', esc(e.message))); return; }
+    if (!d.unlocked) {
+      const card = el('div', 'card');
+      card.innerHTML = '<div class="card-title">共享数据暂不可用</div><div class="empty-tip">最高权限账号尚未登录解锁全局库与文件密钥。这不是「没有授权给你」——解锁后点刷新即可。</div>';
+      mount.appendChild(card);
+      return;
+    }
+    if (!d.tables.length && !d.dirs.length) {
+      const card = el('div', 'card');
+      card.innerHTML = '<div class="card-title">还没有共享内容给你</div><div class="empty-tip">管理员在「用户管理 → 授权」里勾选数据表或目录后, 这里会立即出现; 你的私有文件与私有数据库不受影响。</div>';
+      mount.appendChild(card);
+      return;
+    }
+
+    const levels = {};
+    if (d.tables.length) {
+      d.tables.forEach(t => { levels[t.name] = t.level; });
+      const card = el('div', 'card');
+      card.appendChild(el('div', 'card-title', '共享数据表 (' + d.tables.length + ')'));
+      const tbl = el('table', 'tbl');
+      tbl.innerHTML = '<tr><th>表名</th><th>列</th><th>行数</th><th>权限</th><th>操作</th></tr>';
+      for (const t of d.tables) {
+        const tr = el('tr');
+        tr.innerHTML = `<td>${esc(t.name)}</td><td>${esc(t.columns.join(' / '))}</td><td>${t.count}</td><td>${t.level === 'rw' ? '<span class="tag on">读写</span>' : '<span class="tag">只读</span>'}</td>`;
+        const td = el('td', 'row-actions');
+        const open = el('button', 'btn btn-sm btn-accent', '打开');
+        open.onclick = () => openTables();
+        td.appendChild(open);
+        tr.appendChild(td);
+        tbl.appendChild(tr);
+      }
+      card.appendChild(tbl);
+      mount.appendChild(card);
+    }
+
+    const fileGrants = {};
+    if (d.dirs.length) {
+      const card = el('div', 'card');
+      card.appendChild(el('div', 'card-title', '共享目录 (' + d.dirs.length + ')'));
+      const tbl = el('table', 'tbl');
+      tbl.innerHTML = '<tr><th>目录</th><th>权限</th><th>说明</th><th>操作</th></tr>';
+      for (const x of d.dirs) {
+        fileGrants[x.path] = x.level;
+        const tr = el('tr');
+        tr.innerHTML = `<td>${esc(x.path || '(仓库根)')}</td><td>${x.level === 'rw' ? '<span class="tag on">读写</span>' : '<span class="tag">只读</span>'}</td><td>${x.path ? '子树递归生效' : '仓库根, 会员私有目录除外'}</td>`;
+        const td = el('td', 'row-actions');
+        const open = el('button', 'btn btn-sm btn-accent', '打开');
+        open.onclick = () => openDir(x.path, x.level);
+        td.appendChild(open);
+        tr.appendChild(td);
+        tbl.appendChild(tr);
+      }
+      card.appendChild(tbl);
+      mount.appendChild(card);
+    }
+
+    const view = el('div');
+    mount.appendChild(view);
+
+    // 授权是可叠加的: 任一祖先目录给 rw, 整棵子树都可写; 所以逐层加起来判断, 而不是只看最近的一层
+    function chain(p) {
+      const parts = String(p || '').split('/').filter(Boolean);
+      const out = [''];
+      for (let i = 0; i <= parts.length; i++) out.push(parts.slice(0, i).join('/'));
+      return out;
+    }
+    function writableAt(p) { return chain(p).some(k => fileGrants[k] === 'rw'); }
+
+    function openTables() {
+      view.innerHTML = '';
+      const t = el('div', 'card-title', '共享数据 · 按管理员授予的权限增删改查, 建表与列结构归管理员');
+      view.appendChild(t);
+      const box = el('div');
+      view.appendChild(box);
+      renderDbPanel(box, {
+        apiBase: '/api/shared/db',
+        canCreate: false,
+        canStructure: false,
+        scope: 'SHARED DB',
+        canWriteTable: n => levels[n] === 'rw',
+      }).catch(e => { box.innerHTML = ''; box.appendChild(el('div', 'empty-tip', esc(e.message))); });
+      view.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function openDir(path, level) {
+      view.innerHTML = '';
+      renderFileBrowser(view, {
+        fsBase: '/api/shared/fs',
+        startPath: path,
+        rootLabel: path || '共享根目录',
+        scope: level === 'rw' ? 'SHARED VAULT · 读写' : 'SHARED VAULT · 只读',
+        writableAt,
+      });
+    }
+  }
+  rf.onclick = refresh;
+  await refresh();
 }
 
 function maskPhone(p) {
@@ -2385,7 +2565,7 @@ async function renderAdminAccount(c) {
     <div class="node-tag">${esc(S.nodeId || 'TS73-······')}</div>
     <div style="margin-top:18px">
       <div class="identity-row"><span>角色</span><b>ROOT ADMINISTRATOR</b></div>
-      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.3.0')}</b></div>
+      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.4.0')}</b></div>
       <div class="identity-row"><span>全局数据库</span><b>${st.locked ? '加密锁定' : '已解锁 · AES-256-GCM'}</b></div>
       <div class="identity-row"><span>会话策略</span><b>12h 滑动过期</b></div>
     </div>`;
