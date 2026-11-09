@@ -8,23 +8,17 @@ PORT="${TS_PORT:-7373}"
 TLOG="./data/tunnel.log"
 rm -f ./data/public_url.txt ./data/tunnel.url
 
-# ---------- 0. 凭据安全检查 ----------
-if [ -f ./data/admin.env ]; then
-  chmod 600 ./data/admin.env 2>/dev/null || true
-  . ./data/admin.env
-  export TS_ADMIN_USER TS_ADMIN_PASS
-fi
-if [ -n "${TS_ADMIN_PASS:-}" ] && [ "${#TS_ADMIN_PASS}" -lt 10 ]; then
-  echo "[!] 拒绝联网: admin.env 里的管理员密码短于 10 位, 请先设置强密码。"
-  echo "    先 ./start.sh 本机登录 -> 用户模块改密 (会自动重加密数据库并吊销旧会话)。"
+# ---------- 0. 身份检查 ----------
+# 最高管理员只能来自 .tsowner 导入; 公开包不含任何管理员凭据或引导口令。
+if [ ! -f ./data/auth.json ]; then
+  echo "[!] 尚未导入最高管理员身份: 请先完全退出程序, 运行 sh owner/import-owner-key.sh 导入 .tsowner。"
   exit 1
 fi
 
 if [ ! -f ./data/online.ok ]; then
   echo "首次对外联网前, 请确认已完成:"
-  echo "  1) ./start.sh 本机启动, 浏览器打开 http://127.0.0.1:${PORT} 登录"
-  echo "  2) 在「用户」模块把管理员密码改成只有你知道的值"
-  echo "  3) 确认管理员密码足够强 (至少 10 位)"
+  echo "  1) 已用 sh owner/import-owner-key.sh 导入 .tsowner (用户名与密码在密钥文件内)"
+  echo "  2) ./start.sh 本机启动, 使用原管理员密码 + 绑定手机号登录"
   printf '以上都已完成? 输入 yes 继续联网: '
   read -r ans
   [ "$ans" = "yes" ] || { echo "[x] 已取消。"; exit 1; }

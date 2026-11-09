@@ -339,6 +339,54 @@ button { -webkit-tap-highlight-color: transparent; }
 .auth-chip { margin-left: auto; color: var(--ok); border: 1px solid rgba(61,255,168,.25); padding: 2px 7px; }
 @keyframes riseIn { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
 
+/* ---- 更新提示: 浮层, 不挤压登录表单 ---- */
+.update-banner {
+  position: fixed; top: 18px; left: 50%; z-index: 130; width: min(520px, calc(100vw - 24px));
+  padding: 13px 15px 12px;
+  background: linear-gradient(160deg, rgba(var(--accent-rgb), .07), rgba(6, 9, 16, .97) 42%, rgba(6, 9, 16, .95));
+  border: 1px solid rgba(var(--primary-rgb), .34);
+  border-left: 2px solid var(--primary);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .6), 0 0 34px rgba(var(--primary-rgb), .12);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  animation: updateIn .55s cubic-bezier(.2, .9, .25, 1) both;
+}
+@keyframes updateIn {
+  from { opacity: 0; transform: translate(-50%, -14px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.ub-head { display: flex; align-items: center; gap: 9px; }
+.ub-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 10px var(--primary); animation: signal 1.2s ease-in-out infinite; flex-shrink: 0; }
+.ub-title { font-size: 11px; letter-spacing: 2px; color: var(--primary); text-shadow: 0 0 12px rgba(var(--primary-rgb), .45); }
+.ub-close { margin-left: auto; background: none; border: none; color: var(--dim); cursor: pointer; font-size: 12px; line-height: 1; padding: 2px 4px; }
+.ub-close:hover { color: var(--text); }
+.ub-text { margin: 8px 0 10px; font-size: 11px; line-height: 1.8; color: rgba(214, 226, 240, .78); letter-spacing: .3px; }
+.ub-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ub-link { font-size: 10px; letter-spacing: 1px; color: var(--accent); text-decoration: none; border-bottom: 1px dashed rgba(var(--accent-rgb), .45); }
+.ub-link:hover { color: var(--primary); border-bottom-color: rgba(var(--primary-rgb), .6); }
+.ub-ver { margin-left: auto; font-size: 9px; letter-spacing: 2px; color: var(--dim); }
+/* 提示展开时把登录内容整体下移, 避免遮住身份输入区 */
+body.update-open #login-screen { padding-top: 150px; }
+
+/* ---- 登录页公布的隧道地址: 只读展示, 生成机制不变 ---- */
+.access-line {
+  display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px;
+  border-top: 1px dashed var(--line-soft); font-size: 9px; letter-spacing: 1px;
+}
+.access-label { flex-shrink: 0; color: rgba(var(--primary-rgb), .72); letter-spacing: 2px; }
+.access-url {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--accent); text-decoration: none;
+}
+.access-url.pending { color: var(--dim); cursor: default; }
+.access-url:not(.pending):hover { text-decoration: underline; }
+.access-copy {
+  flex-shrink: 0; padding: 3px 9px; font-size: 9px; letter-spacing: 2px; cursor: pointer;
+  color: var(--primary); background: rgba(var(--primary-rgb), .06);
+  border: 1px solid rgba(var(--primary-rgb), .3);
+}
+.access-copy:disabled { color: var(--dim); border-color: var(--line-soft); cursor: default; }
+.access-copy:not(:disabled):hover { background: rgba(var(--primary-rgb), .14); }
+
 /* ==========================================================================
    主框架
    ========================================================================== */
@@ -494,6 +542,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .stat-label { font-size: 9px; letter-spacing: 3px; color: var(--dim); }
 .stat-icon { font-size: 15px; color: var(--accent); opacity: .75; text-shadow: 0 0 12px rgba(var(--accent-rgb), .25); }
 .stat-val { font-size: clamp(20px, 2.3vw, 28px); color: var(--text); font-weight: 700; letter-spacing: 1px; text-shadow: 0 0 20px rgba(var(--accent-rgb), .18); word-break: break-all; }
+.stat-val.uptime-val { font-size: 20px; letter-spacing: .5px; }
 .stat-note { margin-top: auto; padding-top: 8px; font-size: 8px; letter-spacing: 2px; color: var(--dim); border-top: 1px solid rgba(255,255,255,.04); }
 .stat-note b { color: var(--ok); font-weight: normal; }
 .stat-bar { height: 2px; background: rgba(255,255,255,.05); margin-top: 8px; overflow: hidden; }

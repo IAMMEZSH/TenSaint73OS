@@ -724,6 +724,7 @@ function doLogout(silent) {
 }
 
 async function enterAdmin(st, afterLogin) {
+  hideUpdateBanner();
   if (!st) st = await api('GET', '/api/state');
   else if (!st.features) {
     // 登录接口只返回令牌; 功能模块清单在 /api/state 里, 不补取一次侧栏会是空的
@@ -750,7 +751,7 @@ async function enterAdmin(st, afterLogin) {
   const sideUser = $('#side-user');
   if (sideUser) sideUser.innerHTML = `<b>${esc(S.username)}</b><span>ROOT ADMINISTRATOR</span>`;
   const ver = $('#side-ver');
-  if (ver) ver.textContent = 'OS v' + (st.version || '1.4.0') + ' · ADMIN';
+  if (ver) ver.textContent = 'OS v' + (st.version || '1.5.0') + ' · ADMIN';
   await buildSidebar();
   navigate('dashboard');
   startTicker();
@@ -758,6 +759,7 @@ async function enterAdmin(st, afterLogin) {
 }
 
 async function enterMember(st) {
+  hideUpdateBanner();
   S.role = 'user';
   S.username = st.username;
   S.nodeId = st.nodeId || '';
@@ -810,11 +812,13 @@ async function buildSidebar() {
   const nav = $('#side-nav');
   if (!nav) return;
   nav.innerHTML = '';
-  for (const id of S.features) {
-    const meta = S.featureMeta[id] || { name: id, icon: '✧' };
+  // 以服务端的 enabled 为准而不是登录时缓存的 S.features, 否则刚禁用的模块会留在侧栏直到刷新
+  for (const f of metas) {
+    if (!f.enabled) continue;
+    const id = f.id;
     const item = el('div', 'nav-item' + (id === S.current ? ' active' : ''));
     item.dataset.mod = id;
-    item.innerHTML = `<span class="nav-icon">${esc(meta.icon)}</span>${esc(meta.name)}`;
+    item.innerHTML = `<span class="nav-icon">${esc(f.icon)}</span>${esc(f.name)}`;
     item.onclick = () => navigate(id);
     nav.appendChild(item);
   }
@@ -969,7 +973,9 @@ async function renderDashboard(c) {
   c.appendChild(hero);
 
   const sg = el('div', 'stat-grid');
-  sg.appendChild(statCard('运行时间', ov.uptime, '◷', `NODE ${esc(ov.node)}`, 100));
+  const upCard = statCard('运行时间', ov.uptime, '◷', `NODE ${esc(ov.node)}`, 100);
+  upCard.querySelector('.stat-val').classList.add('uptime-val');
+  sg.appendChild(upCard);
   sg.appendChild(statCard('数据表', ov.tables + ' 张', '⛁', `共计 ${ov.rows} 行数据`, clamp(ov.tables * 8, 8, 100)));
   sg.appendChild(statCard('注册用户', ov.users + ' 个', '☗', '管理员 + 会员独立空间', clamp(ov.users * 10, 8, 100)));
   sg.appendChild(statCard('文件仓库', ov.files + ' 个', '▤', fmtSize(ov.fileSize) + ' · 加密落盘', clamp(ov.files * 2, 8, 100)));
@@ -1434,7 +1440,7 @@ async function renderUsers(c) {
   const bar = el('div', 'file-toolbar');
   const btn = el('button', 'btn', '＋ 新建用户');
   bar.appendChild(btn);
-  bar.appendChild(el('span', 'crumb', '新账号首次登录时自动分配独立加密空间'));
+  bar.appendChild(el('span', 'crumb', '新账号创建时即分配独立加密空间, 与所有其他账号 (包括管理员) 完全隔离'));
   c.appendChild(bar);
   const box = el('div', 'card');
   c.appendChild(box);
@@ -1442,48 +1448,16 @@ async function renderUsers(c) {
   btn.onclick = () => {
     const u = inp('', '用户名');
     const p = inp('', '密码 (至少 8 位)');
-    const r = el('select', 'inp');
-    r.innerHTML = '<option value="user">会员 · 独立私有空间</option><option value="admin">最高权限 · 全局控制</option>';
     const body = el('div');
     body.appendChild(formRow('用户名', u));
     body.appendChild(formRow('密码', p));
-    body.appendChild(formRow('权限阶级', r));
-    body.appendChild(el('div', 'card-small', '会员只能看到自己的文件与数据表, 与其他会员完全隔离。'));
+    body.appendChild(el('div', 'card-small', '新账号一律是会员: 只能看到自己的文件与数据表。最高管理员全机唯一, 只能由 .tsowner 导入建立, 控制台不能新增。'));
     openModal('新建用户', body, async () => {
-      await api('POST', '/api/users/create', { username: u.value, password: p.value, role: r.value });
+      await api('POST', '/api/users/create', { username: u.value, password: p.value, role: 'user' });
       toast('用户已创建');
       refresh();
     }, '创建');
   };
-
-  async function openSpace(username) {
-    let d;
-    try { d = await api('GET', '/api/users/space?username=' + encodeURIComponent(username)); }
-    catch (e) { toast(e.message, true); return; }
-    const body = el('div');
-    body.innerHTML = `<div class="mono-list">
-      <div><span class="k">节点 ID</span><span class="v hl">${esc(d.nodeId)}</span></div>
-      <div><span class="k">工作区</span><span class="v">${esc(d.workspace)}</span></div>
-      <div><span class="k">创建时间</span><span class="v">${esc(fmtTime(d.createdAt))}</span></div>
-      <div><span class="k">数据表</span><span class="v">${d.totals.tables} 张 / ${d.totals.rows} 行</span></div>
-      <div><span class="k">文件</span><span class="v">${d.files.files} 个 / ${fmtSize(d.files.size)}</span></div>
-      <div><span class="k">安全手机</span><span class="v">${d.phoneBound ? '已绑定 · 号码加密, 管理员不可见' : '未绑定'}</span></div>
-    </div>`;
-    if (d.tables.length) {
-      const tbl = el('table', 'tbl');
-      tbl.innerHTML = '<tr><th>表名</th><th>列</th><th>行数</th></tr>' + d.tables.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.columns.join(' / '))}</td><td>${t.count}</td></tr>`).join('');
-      body.appendChild(el('div', 'section-title', '私有数据表'));
-      body.appendChild(tbl);
-    }
-    body.appendChild(el('div', 'section-title', '最近活动'));
-    if (!d.activity.length) body.appendChild(el('div', 'empty-tip', '暂无活动'));
-    else d.activity.slice(0, 10).forEach(a => {
-      const row = el('div', 'feed-item');
-      row.innerHTML = `<span class="feed-dot"></span><span class="feed-time">${esc(fmtTime(a.t))}</span><span class="feed-text">${esc(a.msg)}</span>`;
-      body.appendChild(row);
-    });
-    openModal('私有空间 · ' + username, body, async () => true, '关闭');
-  }
 
   async function openGrants(username) {
     let d;
@@ -1537,37 +1511,16 @@ async function renderUsers(c) {
       tr.innerHTML = `<td>${esc(u.username)}</td><td>${roleTag}</td><td>${phoneTag}</td><td>${esc(fmtTime(u.createdAt))}</td>`;
       const td = el('td', 'row-actions');
       if (u.role !== 'admin') {
-        const space = el('button', 'btn btn-sm btn-accent', '空间');
-        space.onclick = () => openSpace(u.username);
-        td.appendChild(space);
         const grants = el('button', 'btn btn-sm', '授权');
         grants.onclick = () => openGrants(u.username);
         td.appendChild(grants);
       }
-      const pw = el('button', 'btn btn-sm', '改密');
-      pw.onclick = () => {
-        const p = inp('', '新密码 (至少8位)');
-        const body = el('div');
-        body.appendChild(formRow('新密码 [' + u.username + ']', p));
-        openModal('修改密码', body, async () => {
-          if (p.value.length < 8) { toast('密码至少 8 位', true); return false; }
-          const r = await api('POST', '/api/users/password', { username: u.username, password: p.value });
-          if (r.relogin) {
-            toast('密码已修改, 数据库已用新密码重新加密 — 请重新登录');
-            localStorage.removeItem('ts73_token');
-            setTimeout(() => location.reload(), 1200);
-          } else {
-            toast('密码已修改, 该用户的在线会话已全部作废');
-          }
-        }, '修改');
-      };
       const del = el('button', 'btn btn-sm btn-danger', '删除');
-      del.onclick = () => confirmBox(`删除用户 [${u.username}]? 其私有文件与数据仍保留在磁盘上。`, async () => {
+      del.onclick = () => confirmBox(`删除用户 [${u.username}]? 其私有数据库与文件会一并销毁, 无法恢复。`, async () => {
         await api('POST', '/api/users/delete', { username: u.username });
         toast('已删除');
         refresh();
       });
-      td.appendChild(pw);
       td.appendChild(del);
       tr.appendChild(td);
       tbl.appendChild(tr);
@@ -2116,7 +2069,7 @@ async function renderSettings(c) {
 async function renderAbout(c) {
   c.innerHTML = '';
   let st;
-  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.4.0' }; }
+  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.5.0' }; }
   const card = el('div', 'card');
   card.innerHTML = `<div style="text-align:center;padding:18px 8px">
     <div style="position:relative;width:130px;height:130px;margin:0 auto">
@@ -2125,7 +2078,7 @@ async function renderAbout(c) {
     <h2 style="margin-top:18px;letter-spacing:5px;color:var(--primary)">TENSAINT<span style="color:var(--text)">73</span>OS</h2>
     <div style="font-size:9px;color:var(--dim);letter-spacing:3px;margin-top:7px">圣钥协议 · SANCTUM KEY PROTOCOL</div>
     <div class="mono-list" style="text-align:left;margin-top:24px;line-height:2.2">
-      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.4.0')}</span></div>
+      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.5.0')}</span></div>
       <div><span class="k">数据库加密</span><span class="v">AES-256-GCM · 管理员库 / 会员库双轨</span></div>
       <div><span class="k">权限模型</span><span class="v">管理员全局 · 会员仅见自己的文件与数据表</span></div>
       <div><span class="k">文件隔离</span><span class="v">每个账号独立虚拟根目录, 接口层强制隔离</span></div>
@@ -2565,7 +2518,7 @@ async function renderAdminAccount(c) {
     <div class="node-tag">${esc(S.nodeId || 'TS73-······')}</div>
     <div style="margin-top:18px">
       <div class="identity-row"><span>角色</span><b>ROOT ADMINISTRATOR</b></div>
-      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.4.0')}</b></div>
+      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.5.0')}</b></div>
       <div class="identity-row"><span>全局数据库</span><b>${st.locked ? '加密锁定' : '已解锁 · AES-256-GCM'}</b></div>
       <div class="identity-row"><span>会话策略</span><b>12h 滑动过期</b></div>
     </div>`;
@@ -2613,6 +2566,89 @@ async function renderAdminAccount(c) {
 /* ==========================================================================
    静态事件绑定 / 启动
    ========================================================================== */
+// 版本提示: 只要本机还存在旧的部署/账号痕迹, 每次打开页面都提示一次; 关掉只对本次会话生效。
+// 老版本用户看到的提示里直接给出官网发行页, 不要求他们迁移本地数据 —— 数据格式未变。
+function hideUpdateBanner() {
+  const b = $('#update-banner');
+  if (b) b.classList.add('hidden');
+  document.body.classList.remove('update-open');
+}
+async function loadUpdateNotice() {
+  const banner = $('#update-banner');
+  if (!banner) return;
+  let info;
+  try { const r = await rawApi('GET', '/api/update'); info = r.data; } catch (e) { return; }
+  if (!info || !info.version) return;
+  // 官网发行页上没有比本机更新的版本 = 这一份就是最新的, 不打扰。
+  if (!info.update_available) return;
+  let lastUser = '';
+  try { lastUser = localStorage.getItem('ts73_last_user') || ''; } catch (e) { /* 隐私模式 */ }
+  // 没有任何旧数据/旧账号痕迹 = 全新安装, 不打扰。
+  // 有旧部署时每次打开都再提示一次, 直到换成官网发布的新版本。
+  if (!lastUser && !info.data_present) return;
+  const title = $('#ub-title'), text = $('#ub-text'), link = $('#ub-link'), ver = $('#ub-ver');
+  if (title) title.textContent = '发现新版本 · v' + info.latest_version;
+  if (text) {
+    text.textContent = '官网已发布 v' + info.latest_version + '，本机运行 v' + info.version + '。'
+      + '升级时把新版本解压到同一目录、保留 data/ 文件夹即可: 账号、加密数据表、'
+      + '会员私有文件与隧道记录都留在原处, 启动后自动重新连接, 不需要重新导入。';
+  }
+  if (link) {
+    link.href = info.releases_url || info.official_url || 'https://github.com/IAMMEZSH/TenSaint73OS/releases/latest';
+    link.textContent = '前往官网 · 获取最新版本';
+  }
+  if (ver) ver.textContent = 'CURRENT v' + info.version;
+  banner.classList.remove('hidden');
+  document.body.classList.add('update-open');
+  const close = $('#ub-close');
+  if (close) close.onclick = () => hideUpdateBanner();
+}
+
+// 平台内公布隧道地址: 只读取 cloudflared 已生成的结果, 不参与生成, 也不改写隧道机制。
+async function loadAccessUrl(attempt) {
+  const a = $('#access-url'), btn = $('#access-copy');
+  if (!a) return;
+  let data;
+  try { const r = await rawApi('GET', '/api/access'); data = r.data; } catch (e) { return; }
+  const url = data && data.tunnel_url;
+  if (!url) {
+    a.textContent = '隧道尚未分配, 稍后刷新页面';
+    a.classList.add('pending');
+    a.removeAttribute('href');
+    a.removeAttribute('target');
+    if (btn) btn.disabled = true;
+    const login = $('#login-screen');
+    if (!login || login.classList.contains('hidden')) return;
+    const n = attempt || 0;
+    if (n < 8) setTimeout(() => loadAccessUrl(n + 1), 12000);
+    return;
+  }
+  a.textContent = url;
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.classList.remove('pending');
+  if (btn) {
+    btn.disabled = false;
+    btn.onclick = async () => {
+      try {
+        if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(url);
+        else {
+          const ta = document.createElement('textarea');
+          ta.value = url;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        toast('访问地址已复制');
+      } catch (e) { toast('复制失败, 请手动选择地址', true); }
+    };
+  }
+}
+
 function bindStatic() {
   const lf = $('#login-form');
   const rf = $('#register-form');
@@ -2687,6 +2723,8 @@ async function checkSession() {
     } catch (e) { /* 忽略 */ }
   }
   await bootPromise;
+  loadUpdateNotice();
+  loadAccessUrl(0);
   startTicker();
   if (st && st.role === 'admin') {
     await enterAdmin(st);

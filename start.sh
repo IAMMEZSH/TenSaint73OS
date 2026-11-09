@@ -4,12 +4,7 @@
 set -e
 cd "$(dirname "$0")"
 
-ENV_FILE="./data/admin.env"
-if [ -f "$ENV_FILE" ]; then
-  chmod 600 "$ENV_FILE" 2>/dev/null || true
-  . "$ENV_FILE"
-  export TS_ADMIN_USER TS_ADMIN_PASS
-fi
+# 最高管理员只能由 .tsowner 导入; 这里不读取任何管理员凭据文件或环境变量。
 
 if ! command -v node >/dev/null 2>&1; then
   echo "[!] 未找到 node。请先执行: pkg update && pkg install nodejs-lts"

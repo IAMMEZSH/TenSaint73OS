@@ -12,6 +12,7 @@ const { Auth } = require('../core/auth');
 const APP = path.resolve(__dirname, '..');
 const DATA = path.join(APP, 'data');
 const SALT_FILE = path.join(DATA, 'install.salt');
+const OWNER_PIN_FILE = path.join(__dirname, 'OWNER.pin');
 const MAGIC = 'TenSaint73OS-OWNER-KEY';
 const FORMAT = 1;
 const USERNAME_RE = /^[\w\u4e00-\u9fa5][\w\u4e00-\u9fa5.-]{1,19}$/u;
@@ -137,6 +138,76 @@ function defaultOutPath() {
   return path.join(base, 'TenSaint73OS-owner-' + stamp() + '.tsowner');
 }
 
+// 身份指纹只绑定“账号名 + 口令盐 + 口令哈希”, 不含明文口令或手机号。
+// 指纹属于程序目录而不是某台机器: 登记一次即可随程序复制到任意设备;
+// 已登记且不同的指纹拒绝覆盖, 因此一份部署只会接受登记过的那份密钥。
+function fingerprintOf(u) {
+  return crypto.createHash('sha256')
+    .update('TenSaint73OS::owner-pin::v1|' + u.username + '|' + u.salt + '|' + u.hash)
+    .digest('hex');
+}
+
+function readPin() {
+  if (!fs.existsSync(OWNER_PIN_FILE)) return '';
+  for (const line of fs.readFileSync(OWNER_PIN_FILE, 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^\s*(?:OWNER_PIN\s*=\s*)?([0-9a-f]{64})\s*$/i);
+    if (m) return m[1].toLowerCase();
+  }
+  return '';
+}
+
+function readOwnerFile(file) {
+  if (!fs.existsSync(file)) throw new Error('文件不存在: ' + file);
+  let doc;
+  try { doc = JSON.parse(fs.readFileSync(file, 'utf8')); }
+  catch (e) { throw new Error('文件不是有效的所有者密钥。'); }
+  if (!doc || doc.magic !== MAGIC || doc.format !== FORMAT || !doc.envelope) throw new Error('文件格式不受支持。');
+  return doc;
+}
+
+function decryptOwner(doc, pass) {
+  let payload;
+  try { payload = cryptoUtil.decryptJSON(doc.envelope, pass); }
+  catch (e) { throw new Error('口令错误或文件已损坏。'); }
+  if (!payload || payload.kind !== MAGIC || !payload.user) throw new Error('密钥内容无效。');
+
+  const u = payload.user;
+  if (typeof u.username !== 'string' || !USERNAME_RE.test(u.username)) throw new Error('密钥中的用户名无效。');
+  if (u.role !== 'admin') throw new Error('密钥中的身份不是最高管理员。');
+  if (!/^[0-9a-f]{32}$/i.test(String(u.salt || '')) || !/^[0-9a-f]{128}$/i.test(String(u.hash || ''))) {
+    throw new Error('密钥中的凭据格式无效。');
+  }
+  return u;
+}
+
+async function doFingerprint() {
+  const args = process.argv.slice(3);
+  const write = args.includes('--write');
+  const typedPath = args.find((a) => !a.startsWith('--')) || await ask('所有者密钥文件路径: ');
+  const file = typedPath.trim().replace(/^["']|["']$/g, '');
+  const doc = readOwnerFile(file);
+  const pass = await ask('所有者密钥口令 (输入以 * 显示): ', true);
+  const u = decryptOwner(doc, pass);
+
+  const fp = fingerprintOf(u);
+  const existing = readPin();
+  if (existing && existing !== fp) {
+    throw new Error('本程序已登记另一份身份指纹, 拒绝覆盖。若要更换最高管理员, 请先移走 owner/OWNER.pin 后重新登记。');
+  }
+  console.log('');
+  console.log('身份指纹: ' + fp);
+  if (write) {
+    fs.writeFileSync(OWNER_PIN_FILE, 'OWNER_PIN=' + fp + '\n');
+    try { fs.chmodSync(OWNER_PIN_FILE, 0o644); } catch (e) {}
+    console.log('已写入: ' + OWNER_PIN_FILE);
+    console.log('该文件只含指纹, 不含账号、口令或手机号。它跟随程序目录, 可在任意设备生效。');
+  } else {
+    console.log('未写入文件。加 --write 可生成 owner/OWNER.pin。');
+  }
+  console.log('');
+  console.log('之后只有这份 .tsowner 能被导入 (任何设备、任何系统均可); 自行生成的其他密钥会被拒绝。');
+}
+
 async function doExport() {
   console.log('提示: 密码、手机号、口令输入时会显示 *, 输入完成按回车。');
   await requireStopped();
@@ -204,26 +275,26 @@ async function doExport() {
 async function doImport() {
   console.log('提示: 口令输入时会显示 *, 输入完成按回车。');
   await requireStopped();
+
+  // 失败关闭: 没有登记身份指纹就一律拒绝导入, 避免任何自称所有者的密钥被接受。
+  const pin = readPin();
+  if (!pin) {
+    throw new Error('本程序尚未登记所有者身份指纹 (owner/OWNER.pin 缺失或为空), 拒绝导入。\n' +
+      '    先用要授权的那份 .tsowner 登记一次:\n' +
+      '      node owner/owner-vault.js fingerprint <你的 .tsowner> --write\n' +
+      '    登记后 owner/OWNER.pin 随程序目录走, 该 .tsowner 可在任意设备导入。');
+  }
+
   const typedPath = process.argv[3] || await ask('所有者密钥文件路径: ');
   const file = typedPath.trim().replace(/^["']|["']$/g, '');
-  if (!fs.existsSync(file)) throw new Error('文件不存在: ' + file);
-
-  let doc;
-  try { doc = JSON.parse(fs.readFileSync(file, 'utf8')); }
-  catch (e) { throw new Error('文件不是有效的所有者密钥。'); }
-  if (!doc || doc.magic !== MAGIC || doc.format !== FORMAT || !doc.envelope) throw new Error('文件格式不受支持。');
+  const doc = readOwnerFile(file);
 
   const pass = await ask('所有者密钥口令 (输入以 * 显示): ', true);
-  let payload;
-  try { payload = cryptoUtil.decryptJSON(doc.envelope, pass); }
-  catch (e) { throw new Error('口令错误或文件已损坏。'); }
-  if (!payload || payload.kind !== MAGIC || !payload.user) throw new Error('密钥内容无效。');
+  const u = decryptOwner(doc, pass);
 
-  const u = payload.user;
-  if (typeof u.username !== 'string' || !USERNAME_RE.test(u.username)) throw new Error('密钥中的用户名无效。');
-  if (u.role !== 'admin') throw new Error('密钥中的身份不是最高管理员。');
-  if (!/^[0-9a-f]{32}$/i.test(String(u.salt || '')) || !/^[0-9a-f]{128}$/i.test(String(u.hash || ''))) {
-    throw new Error('密钥中的凭据格式无效。');
+  if (fingerprintOf(u) !== pin) {
+    throw new Error('拒绝导入: 该 .tsowner 与 owner/OWNER.pin 登记的身份指纹不一致。\n' +
+      '    本程序只接受登记过的那一份所有者密钥; 自行生成或其他来源的密钥一律无效。');
   }
 
   const auth = openAuth(ensureSalt());
@@ -264,8 +335,12 @@ async function main() {
   const mode = process.argv[2];
   if (mode === 'export') await doExport();
   else if (mode === 'import') await doImport();
+  else if (mode === 'fingerprint') await doFingerprint();
   else {
-    console.log('用法: node owner-vault.js <export|import> [file]');
+    console.log('用法: node owner-vault.js <export|import|fingerprint> [file] [--write]');
+    console.log('  export [file]               导出本机最高管理员身份为 .tsowner');
+    console.log('  fingerprint <file> [--write] 在原设备登记身份指纹到 owner/OWNER.pin');
+    console.log('  import [file]               导入与 owner/OWNER.pin 指纹一致的 .tsowner');
     process.exitCode = 1;
   }
 }

@@ -120,13 +120,6 @@ class Auth {
     fs.renameSync(tmp, this.file);
   }
 
-  ensureUser(username, password, role) {
-    if (this.users.some(u => u.username === username)) return;
-    const { salt, hash } = cryptoUtil.hashPassword(password);
-    this.users.push({ username, salt, hash, role, grants: emptyGrants(), createdAt: now() });
-    this.save();
-  }
-
   // ---- 数据级授权 ----
   // tables: { 表名: 'r' | 'rw' }; files: { 相对目录: 'r' | 'rw' }
   // 目录授权是递归的: 授予 "照片" 即含 "照片/子目录"。根目录用 ""。
@@ -246,11 +239,19 @@ class Auth {
     }));
   }
 
-  addUser(username, password, role) {
-    if (this.users.some(u => u.username === username)) throw new Error('用户已存在');
-    if (role !== 'admin' && role !== 'user') throw new Error('权限阶级只能是 admin 或 user');
+  // 只创建会员。最高管理员全机唯一, 且只能由 owner/import-owner-key 导入 .tsowner 建立。
+  addUser(username, password) {
+    username = String(username || '').trim();
+    password = String(password || '');
+    if (username === '.' || username === '..' || !/^[\w\u4e00-\u9fa5][\w\u4e00-\u9fa5.-]{1,19}$/u.test(username)) {
+      throw new Error('用户名需 2-20 位, 以中英文或数字开头, 可含 _ . -');
+    }
+    if (password.length < 8) throw new Error('密码至少 8 位');
+    if (password.length > 128) throw new Error('密码过长');
+    if (this.users.some(u => u.username.toLowerCase() === username.toLowerCase())) throw new Error('用户已存在');
+    if (this.users.filter(u => u.role !== 'admin').length >= 200) throw new Error('会员名额已满');
     const { salt, hash } = cryptoUtil.hashPassword(password);
-    this.users.push({ username, salt, hash, role, grants: emptyGrants(), createdAt: now() });
+    this.users.push({ username, salt, hash, role: 'user', grants: emptyGrants(), createdAt: now() });
     this.save();
   }
 

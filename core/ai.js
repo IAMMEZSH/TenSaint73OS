@@ -48,7 +48,8 @@ function handle(message, ctx) {
   删除功能 名称  /  启用功能 名称  /  禁用功能 名称
 
 ■ 用户
-  所有用户 / 添加用户 用户名 密码 admin或user / 删除用户 用户名
+  所有用户 / 添加用户 用户名 密码 / 删除用户 用户名
+  (新建账号一律是会员; 最高管理员全机唯一, 只能由 .tsowner 导入建立)
 
 ■ 系统
   系统信息 / 查看密钥 / 轮换密钥 / 打开 模块名`
@@ -194,8 +195,15 @@ Node: ${sys.node}
     const us = sys.auth.listUsers();
     return done(`共 ${us.length} 个用户:\n` + us.map(u => `· ${u.username} [${u.role === 'admin' ? '最高权限' : '受限用户'}]`).join('\n'));
   }
-  m = t.match(/^添加用户\s+(\S+)\s+(\S+)\s+(admin|user)$/);
-  if (m) { sys.auth.addUser(m[1], m[2], m[3]); return done(`已添加用户 ${m[1]}, 角色 ${m[3] === 'admin' ? '最高权限' : '受限用户'}。`); }
+  m = msg.match(/^添加用户\s+(\S+)\s+(\S+)(?:\s+(\S+))?$/);
+  if (m) {
+    const role = m[3] || 'user';
+    if (role === 'admin') return done('最高管理员全机唯一, 不能通过 AI 新建。新账号只能是会员; 最高管理员身份只能由 .tsowner 导入建立。');
+    if (role !== 'user') return done('角色只能是 user; 新账号一律是会员。');
+    try { sys.auth.addUser(m[1], m[2]); }
+    catch (e) { return done(`添加用户失败: ${e.message}`); }
+    return done(`已添加会员 ${m[1]}。`);
+  }
   m = t.match(/^删除用户\s+(\S+)$/);
   if (m) { sys.auth.removeUser(m[1]); return done(`已删除用户 ${m[1]}。`); }
 

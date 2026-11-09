@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" href="/logo.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/css/style.css?v=1.4.0">
+<link rel="stylesheet" href="/css/style.css?v=1.5.0">
 </head>
 <body class="booting">
 <canvas id="bg-canvas"></canvas>
@@ -42,6 +42,20 @@
       <div class="boot-hex" id="boot-hex"></div>
     </div>
     <div class="boot-status" id="boot-status">INITIALIZING CORE</div>
+  </div>
+</div>
+
+<!-- ============ 更新提示 (旧部署每次打开出现一次) ============ -->
+<div id="update-banner" class="update-banner hidden" role="status" aria-live="polite">
+  <div class="ub-head">
+    <span class="ub-dot"></span>
+    <span class="ub-title" id="ub-title">版本提示</span>
+    <button type="button" class="ub-close" id="ub-close" aria-label="关闭更新提示">✕</button>
+  </div>
+  <p class="ub-text" id="ub-text"></p>
+  <div class="ub-foot">
+    <a class="ub-link" id="ub-link" href="https://github.com/IAMMEZSH/TenSaint73OS/releases/latest" target="_blank" rel="noopener noreferrer">前往官网获取最新版本</a>
+    <span class="ub-ver" id="ub-ver"></span>
   </div>
 </div>
 
@@ -124,6 +138,11 @@
         <span>SECURE CHANNEL · 本地回环</span>
         <span id="reg-state-chip" class="auth-chip">注册开放</span>
       </div>
+      <div class="access-line">
+        <span class="access-label">全球访问地址</span>
+        <a class="access-url pending" id="access-url" title="隧道由 cloudflared 随机生成">隧道生成中, 稍后刷新…</a>
+        <button type="button" class="access-copy" id="access-copy" disabled>复制</button>
+      </div>
     </section>
   </div>
 </div>
@@ -135,7 +154,7 @@
       <div class="brand-orb"><img src="/logo.png" alt=""><span class="brand-ring"></span></div>
       <div>
         <div class="side-name">TENSAINT<span>73</span></div>
-        <div class="side-ver" id="side-ver">OS v1.4.0 · ADMIN</div>
+        <div class="side-ver" id="side-ver">OS v1.5.0 · ADMIN</div>
       </div>
     </div>
     <div class="side-kicker">CONTROL MATRIX</div>
@@ -199,6 +218,6 @@
 <div id="toasts"></div>
 <div id="modal-root"></div>
 <style id="custom-css"></style>
-<script src="/js/app.js?v=1.4.0"></script>
+<script src="/js/app.js?v=1.5.0"></script>
 </body>
 </html>

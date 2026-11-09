@@ -1,109 +1,133 @@
-TenSaint73OS · Android / Termux 部署手册
-========================================
-本手册只讲 Android + Termux。Windows、Linux、iPhone/iPad 请看
-压缩包根目录的 先读我.txt。
-本包不是 APK；Android 端用 Termux 运行 Node，再用 Chrome 打开界面。
-公开发行包不包含任何管理员账号、真实数据库或密钥。
+TenSaint73OS · Android / Termux Deployment Guide
+================================================
+This guide covers Android + Termux only. For Windows, Linux and iPhone/iPad
+see the package's Start Here document.
+This package is not an APK. On Android, Termux runs Node and Chrome opens the
+console. The public package contains no administrator account, real database or
+key.
 
-一、安装 Termux
----------------
-1. 从 F-Droid 安装 Termux（Play 商店版本过旧，不推荐）。
-2. 可选安装 Termux:Widget（桌面小部件）和 Termux:Boot（开机自启）。
-3. 打开 Termux，执行：
+1. Install Termux
+-----------------
+1. Install Termux from F-Droid. The Play Store build is outdated and not
+   recommended.
+2. Optional: install Termux:Widget (home-screen widget) and Termux:Boot
+   (start at boot).
+3. Open Termux and run:
      termux-setup-storage
      pkg update -y
      pkg install -y nodejs-lts cloudflared openssl termux-api unzip
-   验证：
+   Verify:
      node -v
      cloudflared --version
 
-二、解压与首次启动
-------------------
-1. 把 TenSaint73OS-Android-Termux.zip 放到手机“下载”目录。
-2. 在 Termux 中执行：
+2. Unpack and first start
+-------------------------
+1. Put TenSaint73OS-Android-Termux.zip in the phone's Download directory.
+2. In Termux:
      cd ~
      unzip ~/storage/downloads/TenSaint73OS-Android-Termux.zip -d ~/
-   解压后应得到：
-     ~/TenSaint73OS              系统主程序与 data
+   After unpacking you should have:
+     ~/TenSaint73OS               main program and data
      ~/启动-TenSaint73OS-Android.sh
      ~/安装-Termux桌面小部件.sh
-3. 启动（任选一种）：
+3. Start it (either command):
      sh ~/启动-TenSaint73OS-Android.sh
-   或：
+   or:
      cd ~/TenSaint73OS
      sh start.sh
-4. 浏览器打开：
+4. Open in the browser:
      http://127.0.0.1:7373
 
-三、账号
---------
-公开发行包默认是会员版：
-  · 注册：登录页点“注册”，自动创建普通会员账号。
-  · 登录：使用自己的会员账号；绑定手机号后还需输入手机号。
-  · 退出：左下角电源按钮。
-  · 注销：账户安全 → 永久注销账号，销毁该账号专属的加密数据库与文件。
-每位会员的数据和文件在磁盘上都是加密的，会员之间无法互相读取。
-公开包没有内置管理员，页面也不能注册出管理员。
+3. Accounts
+-----------
+The public package is member-only by default:
+  - Register: press Register on the login page; an ordinary member is created.
+  - Sign in: use your member account. If a security phone is bound, the number
+    is required as well.
+  - Sign out: the power button at the lower left.
+  - Delete: Account Security -> Permanently delete account. This destroys the
+    account's encrypted database and files.
+Every member's data and files are encrypted on disk, and members cannot read
+each other's space. No administrator is built in, and the page cannot register
+one.
 
-实例拥有者想在本机拥有最高管理员：
-  A. 首次启动前，在 data/ 放 admin.env（格式见 data/admin.env.example），
-     填写 TS_ADMIN_USER 和至少 8 位的 TS_ADMIN_PASS，再启动。
-     只有认证库为空时才会执行这一次创建；创建完成后请删除 admin.env。
-  B. 或先从原设备导出的 .tsowner 恢复：
+If the instance owner wants the supreme administrator on this device:
+  The program never generates administrator credentials and the public package
+  contains none. Register the key you trust, then import the encrypted .tsowner
+  exported on the original device:
+     sh owner/fingerprint-owner-key.sh "/path/to/your.tsowner"
      sh owner/import-owner-key.sh
-     输入原管理员密码、原绑定手机号与密钥口令即可。
-跨设备导出/导入的完整说明见 owner/README.txt。
-管理员密码同时是 data/system.db 的加密密钥，遗失将无法解密系统数据。
+     The first command writes owner/OWNER.pin (fingerprint only, no credentials,
+     portable across devices). While it is absent every import is refused.
+     Enter the .tsowner path and the owner-key passphrase. The import accepts the
+     key only when it matches the pin, so self-made keys are rejected. The
+     administrator identity (username, password hash and bound phone) is written
+     into this installation's encrypted auth vault.
+  Then start the program and sign in with the original administrator password
+  plus the original bound phone number. The import works only while this
+  installation has no administrator. No admin.env, environment variable,
+  console switch, API call or AI command can create one.
+The full cross-device export/import procedure is in owner/README.txt.
+The administrator password is also the encryption key of data/system.db;
+losing it makes the system database unrecoverable.
 
-四、联网：Cloudflare 出站隧道
------------------------------
-默认只监听 127.0.0.1，局域网内其他设备也连不上。需要外网访问时，
-推荐登录管理员账号 → 网络矩阵 → 隧道控制 → 开启隧道。
-首次点「安装隧道组件」即可: 官方源不通会自动切换镜像，
-大文件分段并行下载避免单连接限速；Windows 校验数字签名，
-Linux / Termux / iSH 装好并自检后自动开启隧道，macOS 同样支持。
-替换或升级程序文件后，需完全退出并重新启动平台，页面才会加载新版本。
-更新时整个 TenSaint73OS 目录一起替换；至少 server.js 与 core/downloader.js
-必须同时更新，缺一个服务都无法启动。
-也可以在 Termux 中运行：
+4. Networking: Cloudflare outbound tunnel
+-----------------------------------------
+The server binds 127.0.0.1 only; other devices on the LAN cannot connect
+directly. For external access, sign in as administrator -> Network Matrix ->
+Tunnel Control -> Start tunnel.
+On first use press Install tunnel component. If the official source is
+unreachable the installer switches to a mirror automatically, downloads large
+files in parallel segments to avoid per-connection throttling, and on Windows
+verifies the digital signature. Linux, Termux and iSH start the tunnel after a
+self-check; macOS is supported the same way.
+After replacing or upgrading program files, fully exit and restart the platform
+before the page can load the new version. Replace the whole TenSaint73OS
+directory; at minimum server.js and core/downloader.js must be updated together,
+or the service will not start.
+You can also run, in Termux:
   cd ~/TenSaint73OS
   ./run-online.sh
-脚本会申请唤醒锁、启动 cloudflared 出站隧道，并打印一个
-https://xxxx.trycloudflare.com 地址。全程 HTTPS，不需要公网 IP，
-也不需要在路由器上开端口。
-首次运行会要求输入 yes 确认管理员密码已是只有你知道的强密码。
-停止时按 Ctrl+C，隧道会同时关闭。
+The script acquires a wake lock, starts the cloudflared outbound tunnel and
+prints the HTTPS hostname Cloudflare allocates for this process. It is HTTPS end
+to end, needs no public IP and opens no router port.
+The first run asks you to type yes and confirm that the administrator password
+is a strong secret known only to you. Press Ctrl+C to stop; the tunnel closes
+with the process.
 
-注意：
-  · 快速隧道每次重启都会换网址；固定网址需要用 Cloudflare 命名隧道。
-  · 不要把 7373 端口直接转发到公网，那是明文 HTTP，密码会裸奔。
-  · 系统侧栏的“网址”模块会自动收集本次隧道地址并保留历史。
+Notes:
+  - A Quick Tunnel gets a new URL on every restart. A stable URL requires a
+    Cloudflare named tunnel.
+  - Never forward port 7373 to the Internet. It is plain HTTP; passwords would
+    travel in the clear.
+  - The sidebar URL board collects the current tunnel address and keeps its
+    history.
 
-固定网址（可选，需要自己的域名）：
-  · 注册 Cloudflare 免费账号，在 Zero Trust 里创建命名隧道。
-  · cloudflared tunnel login
-  · cloudflared tunnel create tensaint
-  · 把隧道凭据放到 data/tunnel.json，并写 data/tunnel.yml：
-      tunnel: 你的隧道ID
+Stable URL (optional, requires your own domain):
+  - Register a free Cloudflare account and create a named tunnel in Zero Trust.
+  - cloudflared tunnel login
+  - cloudflared tunnel create tensaint
+  - Put the tunnel credentials in data/tunnel.json and write data/tunnel.yml:
+      tunnel: your-tunnel-id
       credentials-file: /data/data/com.termux/files/home/TenSaint73OS/data/tunnel.json
       ingress:
-        - hostname: 你的域名
+        - hostname: your-domain
           service: http://localhost:7373
         - service: http_status:404
-  · 启动前设置：
+  - Before starting:
       export TS_TUNNEL_NAME=tensaint
-      export TS_PUBLIC_URL=https://你的域名
-  · 再运行 ./run-online.sh，地址就固定不变。
+      export TS_PUBLIC_URL=https://your-domain
+  - Then run ./run-online.sh; the address stays fixed.
 
-五、保持在线（Android 会杀后台）
---------------------------------
-建议全部做到：
-  1. 设置 → 应用 → Termux → 电池 → 不限制 / 不优化。
-  2. 手机厂商的“自启动管理”里允许 Termux 和 Termux:Boot 自启。
-  3. 长期使用时保持插电。
-  4. 开发者选项里关闭“限制后台进程”一类开关。
+5. Staying online (Android kills background apps)
+-------------------------------------------------
+Do all of these:
+  1. Settings -> Apps -> Termux -> Battery -> Unrestricted / Not optimized.
+  2. Allow Termux and Termux:Boot to autostart in the vendor's startup manager.
+  3. Keep the phone on power for long sessions.
+  4. In Developer options, disable limits on background processes.
 
-开机自启（需安装 Termux:Boot）：
+Start at boot (requires Termux:Boot):
   mkdir -p ~/.termux/boot
   cat > ~/.termux/boot/tensaint.sh <<'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
@@ -112,37 +136,46 @@ cd ~/TenSaint73OS
 node server.js
 EOF
   chmod 700 ~/.termux/boot/tensaint.sh
-开机后不打开 Termux，直接用手机浏览器访问 127.0.0.1:7373 验证。
+After a reboot, without opening Termux, verify with the phone browser at
+127.0.0.1:7373.
 
-六、桌面小部件
---------------
+6. Home-screen widget
+---------------------
   sh ~/安装-Termux桌面小部件.sh
-然后安装 F-Droid 的 Termux:Widget，长按桌面 → 小部件 →
-Termux:Widget → 选择 TenSaint73OS。
-小部件默认启动本机模式并打开浏览器；需要外网地址时先手动运行
-./run-online.sh。
+Then install Termux:Widget from F-Droid, long-press the home screen -> Widgets
+-> Termux:Widget -> choose TenSaint73OS.
+The widget starts local mode and opens the browser. For an external address,
+run ./run-online.sh manually first.
 
-七、备份
---------
+7. Backup
+---------
   cd ~/TenSaint73OS
   ./backup.sh
-生成 /sdcard/Download/tensaint-backup-年月日-时分.tar.gz.enc。
-备份包含 data/install.salt，必须和加密数据库一起保存；
-只留 system.db 没有 salt 无法恢复。
-恢复时解压到 ~/TenSaint73OS，命令见 backup.sh 末尾输出。
-备份文件仍然是你的私有数据，不要上传公开网盘或群聊。
+This creates /sdcard/Download/tensaint-backup-YYYYMMDD-HHMM.tar.gz.enc.
+The backup contains data/install.salt, which must be kept with the encrypted
+databases; system.db alone cannot be restored without the salt.
+To restore, unpack into ~/TenSaint73OS; the exact command is printed at the end
+of backup.sh.
+The backup is still your private data. Do not upload it to public storage or
+group chats.
 
-八、按人授权（管理员可选）
---------------------------
-最高权限账号可见全部数据。其他账号默认只能使用自己的空间，
-管理员可以在 用户 → 授权 中按数据表和文件目录配置访问级别。
-授权改动实时生效，撤销后对方立即失去访问。
+8. Per-person grants (optional, administrator)
+----------------------------------------------
+The supreme administrator can see all data. Other accounts can use only their
+own space by default. Under Users -> Grants the administrator can set a level
+per global table and per directory.
+Changes take effect on the member's next request; revoking removes access
+immediately.
 
-九、安全提醒
-------------
-· 公开包不带任何管理员凭据；管理员只属于实例拥有者。
-· 默认只监听 127.0.0.1；对外必须走 HTTPS 隧道。
-· data 目录包含加密数据库、auth.json、system.key 和 install.salt，
-  不要上传公开网盘、群聊或发给不可信的人。
-· 忘记管理员密码将无法解密 system.db，请同时保存好备份和密码。
-· 定期升级 Node.js 与 cloudflared；不要安装来源不明的改包。
+9. Security reminders
+---------------------
+- The public package carries no administrator credentials; the administrator
+  belongs to the instance owner alone.
+- The server binds 127.0.0.1 by default; external access must go through the
+  HTTPS tunnel.
+- data/ contains the encrypted databases, auth.json, system.db and install.salt.
+  Do not upload it to public storage, group chats or untrusted people.
+- A forgotten administrator password cannot decrypt system.db. Keep both the
+  backup and the password.
+- Keep Node.js and cloudflared updated; do not install repackaged builds from
+  unknown sources.

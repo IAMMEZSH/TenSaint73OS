@@ -1,107 +1,179 @@
-TenSaint73OS · 圣钥协议管理系统 v1.3.0
+TenSaint73OS · The Saint Key Protocol · v1.5.0
 ============================================================
 
-本程序是一个零依赖、全本地运行的加密私有空间：
-  · 每位会员拥有独立加密数据库与独立文件目录, 彼此完全隔离
-  · 文件与数据库全程 AES-256-GCM 加密
-  · 默认只监听 127.0.0.1, 局域网与公网都无法直接连接
-  · 需要公网访问时, 由管理员在「网络矩阵 → 隧道控制」开启 cloudflared 出站隧道
+A zero-dependency, fully local encrypted private space:
+  - Every member has a separate encrypted database and file workspace.
+  - Files and databases are AES-256-GCM sealed before they reach disk.
+  - The server binds 127.0.0.1 only; LAN and Internet clients cannot connect
+    directly.
+  - For public access an administrator starts the outbound cloudflared tunnel
+    under Network Matrix -> Tunnel Control.
 
-各平台启动方式见压缩包根目录的「先读我.txt」。
-Windows 使用 TenSaint73OS-Launcher.exe; Linux / Android(Termux) / iPhone(iSH)
-使用对应的「启动-TenSaint73OS-*.sh」。
+Platform launch commands are listed in the package's Start Here file:
+Windows uses TenSaint73OS-Launcher.exe; Linux, Android (Termux) and
+iPhone/iPad (iSH) use the matching launcher script.
 
 
-一、角色与权限
+1. Roles and permissions
 ------------------------------------------------------------
-· 本公开发行包默认是「会员版」: 没有内置管理员, 任何人都不能通过页面
-  获得最高权限。打开后只有三件事:
-    注册会员 / 登录会员 / 注销自己的账号(或退出当前会话)
-· 最高管理员只属于实例拥有者: 管理员数据是你自己部署目录里的
-  data/auth.json 与 data/system.db, 不会包含在公开下载包里。
-· 会员注册后自动获得独立空间:
-    数据库  data/users/<hash>.db
-    文件    data/files/users/<workspace>/
-  会员界面与管理端分离, 会员之间互不可见。
-· 会员可自行修改密码、绑定安全手机号、永久注销账号。
-  永久注销会同时销毁该账号的私有数据库与全部私有文件。
+- This public package is member-only by default: no administrator is built in,
+  and nobody can obtain the supreme role through the web page. It offers three
+  actions only: register a member, sign in as a member, delete your own account
+  (or end the current session).
+- The supreme administrator belongs to the instance owner alone. Admin data
+  lives in your own deployment: data/auth.json and data/system.db. It is never
+  included in the public download.
+- Registration creates an isolated space automatically:
+    database  data/users/<hash>.db
+    files     data/files/users/<workspace>/
+  Member UI and admin console are separate, and members cannot see each other.
+- Private spaces are closed to the supreme administrator too. The admin API
+  cannot list, read, write or delete member databases and files below
+  data/files/users/, cannot read another member's space summary, and cannot
+  reset another member's password. Deleting an account destroys its private
+  database and every private file; this cannot be undone.
+- Members can change their own password, bind a security phone number, and
+  permanently delete their own account.
 
 
-二、最高管理员(仅实例拥有者)
+2. Supreme administrator (instance owner only)
 ------------------------------------------------------------
-管理员账号不会印在程序或文档里。首次部署时由拥有者私有配置:
-  1) 在系统环境变量中设置
-       TS_ADMIN_USER=你的管理员名
-       TS_ADMIN_PASS=至少8位的密码
-     然后启动服务; 仅在认证库为空时创建一次。
-  2) 也可在 data/ 目录放 admin.env (Windows/Linux/服务器),
-     内容为上述两行, 启动时自动读取; 该文件不要外发。
-已存在管理员后, 注册接口只会创建普通会员, 永远无法注册出管理员。
-管理员密码同时是 data/system.db 的加密密钥, 遗失将无法解密系统数据。
+The administrator account is never printed in the program, generated at startup
+or written into the public download. Its username, password and bound phone
+exist only inside the encrypted .tsowner owner key held by the instance owner.
 
-跨设备登录最高管理员: 使用「所有者密钥」(owner/ 目录)
-  公开包不含任何管理员凭据; 把凭据打进公开包等于让任何下载者都能冒充管理员。
-  在原设备完全退出程序后运行 owner 导出脚本, 输入管理员密码、手机号,
-  再设置一个至少 8 位的所有者密钥口令, 生成 .tsowner 加密文件。
-  在任意平台新安装的 TenSaint73OS 上运行 owner 导入脚本, 输入该文件与口令,
-  即可在该设备用原密码 + 手机号登录最高管理员。
-  .tsowner 采用 AES-256-GCM + scrypt, 文件内无明文账号/手机号;
-  文件与口令必须分开保管, 不要放进软件目录或上传 GitHub。
-  身份可移植, 但每台设备的数据仍是独立加密空间, 不会自动同步。
+To establish the supreme administrator on a device:
+  1) Fully exit TenSaint73OS.
+  2) Register the owner fingerprint once from the key you trust:
+       Windows: owner\Fingerprint-Owner-Key.bat "C:\path\to\your.tsowner"
+       Linux / Termux / iSH: sh owner/fingerprint-owner-key.sh "/path/to/your.tsowner"
+     This writes owner/OWNER.pin. While it is absent or empty, every import is
+     refused. The pin contains only a fingerprint, never a password or phone.
+  3) Run owner/import-owner-key (Windows .bat, or sh
+     owner/import-owner-key.sh on Linux / Termux / iSH).
+  4) Supply the .tsowner path and its passphrase. The key is accepted only when
+     its fingerprint matches owner/OWNER.pin, so a self-made key cannot be
+     imported. The identity is written into this installation's encrypted auth
+     vault; the phone is re-encrypted under this installation's key.
+  5) Start TenSaint73OS and sign in with the original administrator password
+     plus the bound phone number.
+
+The pin is portable, not tied to one computer: keep owner/OWNER.pin with the
+program folder (or commit it with the build) and the same .tsowner imports on
+every device of every supported platform. There is no other path. There is no
+admin.env, environment variable, console switch, API call or AI command that
+creates an administrator. The import is allowed only while this machine has no
+administrator, and every other creation path produces an ordinary member. The
+administrator password is also the encryption key of data/system.db; losing it
+makes the system database unrecoverable.
+
+The Owner Key is created on the original device that already has the
+administrator (owner/Export-Owner-Key.bat, or sh owner/export-owner-key.sh):
+enter the administrator password, the bound phone number if any, and an
+owner-key passphrase of at least 8 characters. The script produces an encrypted
+.tsowner file. .tsowner uses AES-256-GCM with scrypt and contains no plaintext
+account name or phone number. Keep the file and its passphrase separate. Do not
+put them in the software directory or upload them to GitHub.
+Identity is portable, but each device keeps its own encrypted data space;
+nothing is synchronized automatically.
 
 
-三、数据库与密钥
+3. Databases and keys
 ------------------------------------------------------------
-· 系统数据库: data/system.db, AES-256-GCM, 密钥由管理员密码经 scrypt 派生
-· 会员数据库: data/users/<sha256(username)>.db, 每人一个文件
-· 安装盐:     data/install.salt, 每台设备独立生成
-· 文件完整性: 核心文件被移动/修改后, 下次启动自动轮换系统密钥
-· 备份: 关闭服务后复制整个 TenSaint73OS 文件夹即可, 数据已是加密状态
-· 注意: install.salt + auth.json + system.db 必须一起备份/搬迁,
-  单独拷贝其中一个都无法恢复原有账号与数据。
+- System database: data/system.db, AES-256-GCM, key derived from the admin
+  password with scrypt.
+- Member databases: data/users/<sha256(username)>.db, one file per member.
+- Install salt: data/install.salt, generated independently per device.
+- File integrity: when core files are moved or modified, the next start rotates
+  the displayed system key value. That value is a tamper fingerprint, not the
+  data encryption key; auth and member data remain readable.
+- Backup: stop the service, then copy the whole TenSaint73OS folder. The data
+  is already encrypted.
+- Important: install.salt + auth.json + system.db must be backed up and moved
+  together. Copying only one of them cannot restore the original accounts or
+  data.
 
 
-四、公网访问(仅管理员)
+4. Public access (administrator only)
 ------------------------------------------------------------
-· 本机: http://127.0.0.1:7373
-· 远程: 管理员登录 → 网络矩阵 → 隧道控制 → 开启隧道
-    首次使用点一次「安装隧道组件」即可: 官方源不通会自动切换镜像,
-    大文件分段并行下载避免单连接限速; Windows 会校验 Cloudflare 数字签名,
-    装好自检后自动开启并显示地址。
-    Windows / Linux / Android(Termux) / iPhone(iSH) 四平台通用, macOS 也支持。
-    隧道建立后自动生成 https://xxxx.trycloudflare.com 随机地址,
-    并写入「网址」板块; 关闭隧道后该地址立即失效。
-· 也可在终端运行 ./run-online.sh 使用命令行隧道 (同样已固定 HTTP/2 + IPv4)。
-· 替换或升级程序文件后, 需完全退出并重新启动平台, 页面才会加载新版本。
-· 绝对不要用路由器端口转发把 7373 明文 HTTP 暴露到公网。
+- Local address: http://127.0.0.1:7373
+- Remote: sign in as administrator -> Network Matrix -> Tunnel Control ->
+  Start tunnel.
+  On first use press Install tunnel component once. If the official source is
+  unreachable the installer switches to a mirror automatically, downloads large
+  files in parallel segments to avoid per-connection throttling, and on Windows
+  verifies the Cloudflare digital signature. After a self-check it starts the
+  tunnel and displays the address.
+  Windows, Linux, Android (Termux), iPhone (iSH) and macOS are supported.
+  The tunnel obtains a fresh HTTPS hostname from Cloudflare at runtime and
+  publishes it in the platform URL board. Closing the tunnel invalidates that
+  hostname immediately; no fixed address is shipped in this package.
+- You can also run ./run-online.sh for a command-line tunnel (fixed HTTP/2 +
+  IPv4).
+- After replacing or upgrading program files, fully exit and restart the
+  platform before the page can load the new version.
+- Never expose port 7373 as plain HTTP through router port forwarding.
 
 
-五、安全手机号
+5. Security phone number
 ------------------------------------------------------------
-· 账户安全 → 绑定安全手机号后, 登录必须同时验证密码与该号码。
-· 号码以 AES-256-GCM 单独加密保存, 密钥由 install.salt 派生,
-  磁盘上不出现明文; 管理员用户列表只显示「已绑定 / 未绑定」。
-· 只有本人能查看自己的完整号码。
+- Account Security -> bind a security phone. Once bound, sign-in requires both
+  the password and that number.
+- The number is stored separately with AES-256-GCM, using a key derived from
+  install.salt. No plaintext number appears on disk. The administrator user
+  list shows only bound / not bound; only the owner of the account can view the
+  complete number.
 
 
-六、目录
+6. Directory layout
 ------------------------------------------------------------
   TenSaint73OS/
-    server.js          核心服务器
-    core/              加密 / 数据库 / 认证 / AI
-    public/            网页界面
-    owner/             所有者密钥导出/导入 (跨设备恢复最高管理员)
-    data/              加密数据、密钥、认证库(自动生成)
-    start.sh           Termux / Linux 通用启动脚本
-    run-online.sh      命令行隧道启动
-    backup.sh          备份脚本
-    README.txt         本说明
-    README-iOS.txt     iPhone / iPad 细节
-    DEPLOY.txt         Android / Termux 部署细节
+    server.js          core HTTP server
+    core/              crypto / database / auth / AI kernels
+    public/            web console
+    owner/             owner-key export, fingerprint registration and import
+    data/              encrypted data, keys, auth vault (created automatically)
+    docs/              documentation figures
+    screenshots/       console screenshots
+    start.sh           Termux / Linux launcher
+    run-online.sh      command-line tunnel launcher
+    backup.sh          backup helper
+    README.md          complete English manual
+    README.txt         this quick start
+    DEPLOY.txt         Android / Termux deployment details
+    README-iOS.txt     iPhone / iPad details
 
 
-七、提醒
+7. Updates and data continuity
 ------------------------------------------------------------
-· data/ 内含认证库与加密数据, 不要上传公开网盘或发给不可信的人。
-· 公开发行包不包含任何真实账号或数据; 首次运行会自动生成新的 install.salt。
-· 会员忘记密码无法找回; 管理员忘记管理员密码无法解密 system.db。
+- A copy that predates the update notice has no network update channel and
+  cannot be modified from the outside. To upgrade, extract the new build over
+  the same directory while keeping data/ in place, or copy the old data/
+  directory into the new folder before the first start.
+- Accounts, encrypted tables, member workspaces and tunnel records stay where
+  they are. After the upgrade, sign in with the same account and the workspace
+  reconnects automatically; no export, import or path remapping is needed.
+- Sessions live in memory only, so a restart asks for the password again.
+- The tunnel mechanism is unchanged: cloudflared still allocates a fresh
+  Cloudflare Quick Tunnel hostname, and the platform publishes whatever URL the
+  current process obtained.
+- The current build compares itself with the newest published GitHub release
+  (one request to the public releases API, cached for an hour, silent when
+  offline). When that release is newer and this machine still holds a previous
+  deployment (a remembered account or existing data: system database, member
+  databases, member workspaces, tunnel record), the update notice appears on
+  every page open. A current build is never asked to update itself. Closing it
+  hides it for that session only; the next open shows it again, and no browser
+  marker can silence it permanently. A brand-new install with no data and no
+  remembered account is not interrupted. The official release page is
+  https://github.com/IAMMEZSH/TenSaint73OS/releases/latest
+
+
+8. Reminders
+------------------------------------------------------------
+- data/ contains the auth vault and encrypted data. Do not upload it to public
+  storage or send it to untrusted people.
+- The public package contains no real accounts or data. The first run creates
+  a new install.salt.
+- A member who forgets the password cannot recover it. An administrator who
+  forgets the admin password cannot decrypt system.db.

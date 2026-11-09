@@ -4,6 +4,7 @@
    零依赖 / 便携运行 / 数据库全程加密 / 文件变动自动轮换系统密钥
 ============================================================================ */
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -25,7 +26,10 @@ const USERDATA = path.join(DATA, 'users');
 const USER_FILES = path.join(FILES, 'users');
 const PUBLIC = path.join(ROOT, 'public');
 const SYSTEM_NAME = 'TenSaint73OS';
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
+// 官方发行页 (更新提示用; 隧道地址仍由 cloudflared 随机生成, 这里不写死任何公网地址)
+const OFFICIAL_URL = 'https://github.com/IAMMEZSH/TenSaint73OS';
+const RELEASES_URL = OFFICIAL_URL + '/releases/latest';
 
 /* ---------------- 运行环境 (iOS · iSH / 通用 Node) ---------------- */
 const IS_TERMUX = /com\.termux/.test(`${process.env.PREFIX || ''}${process.env.HOME || ''}`);
@@ -117,34 +121,17 @@ const auth = new Auth(path.join(DATA, 'auth.json'), INSTALL_KEY);
 if (auth.loadError) {
   console.log('[!] 认证库无法在本机解密 (系统被复制到其它环境)。请用初始安装目录运行。');
 }
-// 本机私有管理员配置: data/admin.env 只在环境变量未设置时读取, 不随公开包分发。
-if (!process.env.TS_ADMIN_USER) {
-  const envFile = path.join(DATA, 'admin.env');
-  if (fs.existsSync(envFile)) {
-    try {
-      for (const line of fs.readFileSync(envFile, 'utf8').split(/\r?\n/)) {
-        const m = line.match(/^\s*(TS_ADMIN_USER|TS_ADMIN_PASS)\s*=\s*(.*?)\s*$/);
-        if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
-      }
-    } catch (e) { /* 忽略 */ }
-  }
-}
-// 内置默认账号已移除: 公开写死的凭据 = 任何拿到本程序的人都能用最高权限登录。
-// 管理员账号来源: 已有认证库 > TS_ADMIN_USER/TS_ADMIN_PASS 环境变量 > 拒绝创建并提示。
-if (auth.users.length === 0) {
-  const bu = (process.env.TS_ADMIN_USER || '').trim();
-  const bp = process.env.TS_ADMIN_PASS || '';
+// 最高管理员身份只能由 .tsowner 导入: 公开包不含任何管理员凭据、引导口令或环境变量入口。
+// 认证库里已有管理员时照常启动 (升级用户的账号与数据原样保留); 没有管理员时以会员模式运行。
+if (!auth.users.some(u => u.role === 'admin')) {
   if (auth.loadError) {
     console.log('[!] 认证库在本环境无法解密, 已按空库处理。');
-  }
-  if (bu && bp.length >= 8) {
-    auth.ensureUser(bu, bp, 'admin');
-    console.log(`[i] 已按环境变量创建管理员账号 [${bu}] (仅存 scrypt 哈希)`);
-  } else if (!auth.loadError) {
-    console.log('[i] 未配置最高管理员: 以会员模式运行 (注册 / 登录 / 自助注销, 每人独立加密空间)。');
-    console.log('    如需管理端, 设置 TS_ADMIN_USER 与至少 8 位的 TS_ADMIN_PASS 后重启即可。');
+  } else if (auth.users.length === 0) {
+    console.log('[i] 未检测到最高管理员: 以会员模式运行 (注册 / 登录 / 自助注销, 每人独立加密空间)。');
+    console.log('    需要管理端时, 请先完全退出程序, 再运行 owner/import-owner-key 导入 .tsowner, 然后重新启动。');
   } else {
-    console.log('[!] 请设置 TS_ADMIN_USER 与至少 8 位的 TS_ADMIN_PASS 后重启以重建账号。');
+    console.log('[i] 未检测到最高管理员: 现有会员账号仍可正常登录。');
+    console.log('    最高管理员只能通过 owner/import-owner-key 导入 .tsowner 恢复。');
   }
 } else if (auth.users.some(u => u.role !== 'admin' && !u.grants)) {
   console.log('[i] 存在尚未授权的受限账号。它们默认看不到任何数据, 请在 用户管理 → 授权 中逐项勾选。');
@@ -182,6 +169,28 @@ function userStoreFor(username) {
   return us;
 }
 
+// 旧版本删除账号时保留过私有目录/数据库; 同名重建会把旧数据重新挂到新账号上。
+// 建号前把这类孤儿空间移出可访问范围, 新账号从空空间开始 (字节保留在 data/quarantine)。
+function quarantineOrphanSpace(username) {
+  const ws = path.join(USER_FILES, workspaceName(username));
+  const db = path.join(USERDATA, util.sha256(username).slice(0, 32) + '.db');
+  if (!fs.existsSync(ws) && !fs.existsSync(db)) return false;
+  const qdir = path.join(DATA, 'quarantine');
+  util.ensureDir(qdir);
+  const tag = Date.now().toString(36) + '-' + crypto.randomBytes(3).toString('hex');
+  for (const [p, label] of [[ws, 'ws'], [db, 'db']]) {
+    if (!fs.existsSync(p)) continue;
+    try { fs.renameSync(p, path.join(qdir, label + '-' + tag)); }
+    catch (e) {
+      try {
+        if (fs.statSync(p).isDirectory()) fs.rmSync(p, { recursive: true, force: true });
+        else fs.rmSync(p, { force: true });
+      } catch (e2) { /* 无法移动也无法删除时保持原样 */ }
+    }
+  }
+  return true;
+}
+
 function ensureUserSpace(username) {
   const dir = userFilesRoot(username);
   const welcome = path.join(dir, '空间说明.txt');
@@ -189,7 +198,8 @@ function ensureUserSpace(username) {
     const text = [
       `欢迎来到 ${username} 的私有空间`,
       '',
-      '· 这里的文件默认只有你自己能看到; 只有管理员在「用户授权」里显式给你开过目录, 该目录才会出现在你的共享视图里。',
+      '· 这里的文件与数据默认只有你自己能看到; 平台没有给最高管理员留读别人私有空间的入口。',
+      '· 只有管理员把自己名下的全局表/目录显式授权给你时, 共享视图里才会多出那一项; 你的私有空间不在可授权范围内。',
       '· 数据库 → 我的数据库: 你可以自由建表、增删改查, 与其他用户互不影响。',
       '· 所有文件和数据库在磁盘上都是 AES-256-GCM 加密的。',
       '· 退出登录请使用左下角 / 顶部电源按钮。',
@@ -355,7 +365,15 @@ function sharedRel(raw) {
 function sharedDenied(rel) {
   if (!rel) return false;
   const parts = rel.split('/');
-  return parts[0] === PRIVATE_DIR || parts.indexOf('..') >= 0 || rel.indexOf('\0') >= 0;
+  // Windows / macOS 文件系统不区分大小写, "USERS" 或尾随空格的 "users." 仍会落到同一个目录
+  const head = String(parts[0] || '').replace(/[. ]+$/, '').toLowerCase();
+  return head === PRIVATE_DIR || parts.indexOf('..') >= 0 || rel.indexOf('\0') >= 0;
+}
+
+// 最高管理员能看全局仓库, 但会员私有空间这一棵子树对任何人都不开放 —— 包括管理员自己。
+// 平台不提供读别人私有文件/数据库的入口; 磁盘上的密钥属于机器, 不属于账号。
+function adminPrivateDenied(user, rel) {
+  return isAdmin(user) && sharedDenied(rel);
 }
 
 function isAdmin(user) { return !!user && user.role === 'admin'; }
@@ -363,6 +381,12 @@ function isAdmin(user) { return !!user && user.role === 'admin'; }
 // 管理员 -> 全局加密库; 普通用户 -> 自己的独立加密库
 function dbFor(user) {
   return isAdmin(user) ? store : userStoreFor(user.username);
+}
+
+// 文件操作日志写进操作者自己的库: 会员的上传/删除记录不能出现在管理员日志里
+function logFor(user, level, msg) {
+  if (isAdmin(user)) return store.log(level, msg);
+  try { userStoreFor(user.username).touch(level, msg); } catch (e) { /* 日志失败不影响操作 */ }
 }
 
 // 管理员 -> 整个文件仓库; 普通用户 -> 自己的虚拟根目录
@@ -397,6 +421,7 @@ route('POST', '/api/register', async (req, res) => {
   const { username, password } = await readBody(req);
   try {
     const u = auth.register(String(username || ''), String(password || ''));
+    quarantineOrphanSpace(u.username);
     ensureUserSpace(u.username);
     if (store.unlocked) store.log('info', `新用户注册: ${u.username} · 独立空间已分配`);
     const token = auth.createSession(u);
@@ -452,6 +477,92 @@ route('GET', '/api/state', async (req, res) => {
 
 route('GET', '/api/theme', async (req, res) => {
   send(res, 200, { theme: store.unlocked ? store.doc.settings.theme : { ...DEFAULT_THEME } });
+});
+
+// 更新提示与平台内公布的隧道地址: 只读, 不含账号/数据。隧道地址仍由 cloudflared 随机生成。
+function currentPublicUrl() {
+  if (tunnelState.url) return tunnelState.url;
+  for (const f of [path.join(DATA, 'public_url.txt'), path.join(DATA, 'tunnel.url')]) {
+    try {
+      const u = fs.readFileSync(f, 'utf8').split('\n')[0].trim();
+      if (/^https:\/\/\S+$/i.test(u)) return u;
+    } catch (e) { /* 还没生成 */ }
+  }
+  return process.env.TS_PUBLIC_URL || '';
+}
+
+// 旧版本痕迹: 只看本机是否已经有加密库/会员空间/隧道记录。
+// 它决定「要不要弹更新提示」——全新安装没有旧数据, 不打扰; 有数据的老副本才提示。
+function hasExistingData() {
+  try {
+    if (fs.existsSync(path.join(DATA, 'system.db'))) return true;
+    if (fs.existsSync(path.join(DATA, 'tunnel.url')) || fs.existsSync(path.join(DATA, 'public_url.txt'))) return true;
+    if (fs.readdirSync(USERDATA).some(f => f.endsWith('.db'))) return true;
+    if (fs.readdirSync(USER_FILES).length > 0) return true;
+  } catch (e) { /* 目录还没建好时按「没有旧数据」处理 */ }
+  return false;
+}
+
+// 官方最新版本: 只向发行接口要一个版本号, 不带账号/数据; 拿到比本机新的版本才提示。
+// 缓存一小时, 失败就沿用上次结果 (没有结果就不提示) —— 离线部署不会被拖慢也不会误报。
+const RELEASE_API = 'https://api.github.com/repos/IAMMEZSH/TenSaint73OS/releases/latest';
+let releaseProbe = { at: 0, version: '' };
+
+function versionOlder(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] !== pb[i]) return pa[i] < pb[i];
+  }
+  return false;
+}
+
+function latestOfficialVersion() {
+  if (Date.now() - releaseProbe.at < 3600 * 1000) return Promise.resolve(releaseProbe.version);
+  releaseProbe.at = Date.now();
+  return new Promise((resolve) => {
+    const req = https.get(RELEASE_API, {
+      headers: { 'User-Agent': 'TenSaint73OS', Accept: 'application/vnd.github+json' },
+      timeout: 6000,
+    }, (resp) => {
+      if (resp.statusCode !== 200) { resp.resume(); return resolve(releaseProbe.version); }
+      let body = '';
+      resp.setEncoding('utf8');
+      resp.on('data', (c) => { if (body.length < 65536) body += c; });
+      resp.on('end', () => {
+        try {
+          const tag = String(JSON.parse(body).tag_name || '').replace(/^v/i, '');
+          if (/^\d+\.\d+\.\d+$/.test(tag)) releaseProbe.version = tag;
+        } catch (e) { /* 不是 JSON 就当没拿到 */ }
+        resolve(releaseProbe.version);
+      });
+      resp.on('error', () => resolve(releaseProbe.version));
+    });
+    req.on('timeout', () => req.destroy());
+    req.on('error', () => resolve(releaseProbe.version));
+  });
+}
+
+route('GET', '/api/update', async (req, res) => {
+  const latest = await latestOfficialVersion();
+  send(res, 200, {
+    version: VERSION,
+    latest_version: latest,
+    update_available: !!latest && versionOlder(VERSION, latest),
+    official_url: OFFICIAL_URL,
+    releases_url: RELEASES_URL,
+    data_present: hasExistingData(),
+    data_preserved: true,
+    auto_reconnect: true,
+  });
+});
+
+route('GET', '/api/access', async (req, res) => {
+  send(res, 200, {
+    version: VERSION,
+    tunnel_url: currentPublicUrl(),
+    official_url: RELEASES_URL,
+  });
 });
 
 // ---- 以下全部需要管理员 + 数据库解锁 ----
@@ -575,52 +686,66 @@ route('GET', '/api/fs/list', async (req, res, user) => {
   if (isAdmin(user) && !requireFeature(res, 'files')) return;
   const root = fsRootFor(user);
   const q = new URLSearchParams(req.url.split('?')[1] || '');
-  const dir = util.safeJoin(root, q.get('path') || '');
+  const rel = sharedRel(q.get('path') || '');
+  if (adminPrivateDenied(user, rel)) return send(res, 403, { error: '会员私有空间只对本人开放' });
+  const dir = util.safeJoin(root, rel);
   if (!dir || !fs.existsSync(dir)) return send(res, 404, { error: '目录不存在' });
   const items = fs.readdirSync(dir).map(f => {
     const st = fs.statSync(path.join(dir, f));
     return { name: f, dir: st.isDirectory(), size: st.size, mtime: st.mtimeMs };
-  }).sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name));
-  send(res, 200, { path: q.get('path') || '', items, scope: isAdmin(user) ? 'global' : 'private' });
+  }).filter(it => !(isAdmin(user) && !rel && it.name.toLowerCase() === PRIVATE_DIR))
+    .sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name));
+  send(res, 200, { path: rel, items, scope: isAdmin(user) ? 'global' : 'private' });
 });
 
 route('POST', '/api/fs/mkdir', async (req, res, user) => {
   const { path: rel, name } = await readBody(req);
   const root = fsRootFor(user);
-  const dir = util.safeJoin(root, path.join(rel || '', String(name || '').replace(/[\\/:*?"<>|]/g, '_')));
+  const base = sharedRel(rel || '');
+  const clean = String(name || '').replace(/[\\/:*?"<>|]/g, '_');
+  const targetRel = path.posix.join(base, clean);
+  if (adminPrivateDenied(user, targetRel)) return send(res, 403, { error: '会员私有空间只对本人开放' });
+  const dir = util.safeJoin(root, targetRel);
   if (!dir) return send(res, 400, { error: '非法路径' });
   fs.mkdirSync(dir, { recursive: true });
-  store.log('info', `创建目录 ${name}`);
+  logFor(user, 'info', `创建目录 ${name}`);
   send(res, 200, { ok: true });
 });
 
 route('POST', '/api/fs/upload', async (req, res, user) => {
   const { path: rel, name, data } = await readBody(req);
   const root = fsRootFor(user);
+  const base = sharedRel(rel || '');
   const clean = String(name || 'file').replace(/[\\/:*?"<>|]/g, '_');
-  const file = util.safeJoin(root, path.join(rel || '', clean));
+  const targetRel = path.posix.join(base, clean);
+  if (adminPrivateDenied(user, targetRel)) return send(res, 403, { error: '会员私有空间只对本人开放' });
+  const file = util.safeJoin(root, targetRel);
   if (!file) return send(res, 400, { error: '非法路径' });
   const plain = Buffer.from(String(data || ''), 'base64');
   fs.writeFileSync(file, sealBytes(plain));
-  store.log('info', `上传文件 ${clean} (${Math.round(plain.length / 1024)}KB, 已加密落盘)`);
+  logFor(user, 'info', `上传文件 ${clean} (${Math.round(plain.length / 1024)}KB, 已加密落盘)`);
   send(res, 200, { ok: true });
 });
 
 route('POST', '/api/fs/delete', async (req, res, user) => {
   const { path: rel } = await readBody(req);
   const root = fsRootFor(user);
-  const p = util.safeJoin(root, rel || '');
+  const base = sharedRel(rel || '');
+  if (adminPrivateDenied(user, base)) return send(res, 403, { error: '会员私有空间只对本人开放' });
+  const p = util.safeJoin(root, base);
   if (!p || p === root) return send(res, 400, { error: '非法路径' });
   if (!fs.existsSync(p)) return send(res, 404, { error: '不存在' });
   fs.rmSync(p, { recursive: true, force: true });
-  store.log('warn', `删除 ${rel}`);
+  logFor(user, 'warn', `删除 ${rel}`);
   send(res, 200, { ok: true });
 });
 
 route('GET', '/api/fs/download', async (req, res, user) => {
   const root = fsRootFor(user);
   const q = new URLSearchParams(req.url.split('?')[1] || '');
-  const p = util.safeJoin(root, q.get('path') || '');
+  const rel = sharedRel(q.get('path') || '');
+  if (adminPrivateDenied(user, rel)) return send(res, 403, { error: '会员私有空间只对本人开放' });
+  const p = util.safeJoin(root, rel);
   if (!p || !fs.existsSync(p) || !fs.statSync(p).isFile()) return send(res, 404, { error: '文件不存在' });
   const raw = fs.readFileSync(p);
   let out = raw;
@@ -640,9 +765,13 @@ route('GET', '/api/users', async (req, res, user) => {
 
 route('POST', '/api/users/create', async (req, res, user) => {
   const { username, password, role } = await readBody(req);
-  if (String(password || '').length < 8) return send(res, 400, { error: '密码至少 8 位' });
-  auth.addUser(String(username), String(password), role === 'admin' ? 'admin' : 'user');
-  store.log('info', `新建用户 ${username}`);
+  if (role === 'admin') return send(res, 400, { error: '最高管理员全机唯一, 只能通过 .tsowner 导入建立; 控制台只能新增会员' });
+  const name = String(username || '');
+  try { auth.addUser(name, String(password)); }
+  catch (e) { return send(res, 400, { error: e.message }); }
+  quarantineOrphanSpace(name);
+  ensureUserSpace(name);
+  store.log('info', `新建用户 ${name}`);
   send(res, 200, { ok: true });
 });
 
@@ -650,15 +779,21 @@ route('POST', '/api/users/delete', async (req, res, user) => {
   const { username } = await readBody(req);
   if (username === user.username) return send(res, 400, { error: '不能删除当前登录账户' });
   const name = String(username);
+  // 账号一经删除就销毁其私有空间: 如果保留目录, 任何人用同名重新注册都能接管旧数据,
+  // 这等于给「最高管理员也读不到别人私有数据」开了一条侧门。
   auth.removeUser(name);
-  userStores.delete(name);            // 私有数据文件保留, 防止误删后无法找回
-  store.log('warn', `删除用户 ${name}`);
+  userStores.delete(name);
+  try { fs.rmSync(path.join(USER_FILES, workspaceName(name)), { recursive: true, force: true }); } catch (e) { /* 已不存在 */ }
+  try { fs.rmSync(path.join(USERDATA, util.sha256(name).slice(0, 32) + '.db'), { force: true }); } catch (e) { /* 已不存在 */ }
+  store.log('warn', `删除用户 ${name}, 私有数据库与文件已销毁`);
   send(res, 200, { ok: true });
 });
 
 route('GET', '/api/users/space', async (req, res, user) => {
   const q = new URLSearchParams(req.url.split('?')[1] || '');
   const name = String(q.get('username') || '');
+  // 私有空间统计只给本人看: 管理员也没有读别人表名/行数/文件数/活动的入口
+  if (name !== user.username) return send(res, 403, { error: '私有空间只对本人开放' });
   const u = auth.getUser(name);
   if (!u) return send(res, 404, { error: '用户不存在' });
   const us = userStoreFor(name);
@@ -674,6 +809,8 @@ route('GET', '/api/users/space', async (req, res, user) => {
 route('POST', '/api/users/password', async (req, res, user) => {
   const { username, password } = await readBody(req);
   const target = String(username);
+  // 管理员不能替别人改密再登录进去读私有数据; 改密只允许本人
+  if (target !== user.username) return send(res, 403, { error: '只能修改自己的密码; 私有数据只对本人开放' });
   const np = String(password || '');
   if (np.length < 8) return send(res, 400, { error: '密码至少 8 位' });
   auth.changePassword(target, np);          // 内部已吊销该用户全部在线令牌
@@ -691,7 +828,7 @@ function listDirs() {
     if (!abs || !fs.existsSync(abs)) return;
     for (const f of fs.readdirSync(abs)) {
       // 会员私有空间不可授权 (共享接口在读取层也会拒绝), 所以不把它列进可授权目录
-      if (!rel && f === PRIVATE_DIR) continue;
+      if (!rel && f.toLowerCase() === PRIVATE_DIR) continue;
       const st = fs.lstatSync(path.join(abs, f));
       if (st.isSymbolicLink() || !st.isDirectory()) continue;
       const sub = rel ? rel + '/' + f : f;
@@ -800,8 +937,8 @@ route('POST', '/api/me/password', async (req, res, user) => {
     return send(res, 403, { error: '当前密码不正确' });
   }
   auth.changePassword(user.username, np);   // 内部吊销该账号全部在线令牌
-  if (isAdmin(user) && store.unlocked) store.rekey(np);
-  if (store.unlocked) store.log('warn', `用户 ${user.username} 修改了自己的密码`);
+  if (store.unlocked && isAdmin(user)) store.rekey(np);
+  logFor(user, 'warn', `用户 ${user.username} 修改了自己的密码`);
   send(res, 200, { ok: true, relogin: true });
 });
 
@@ -832,10 +969,11 @@ function sharedTableLevel(user, name) {
 
 function sharedTableGate(res, user, name, needWrite) {
   if (!store.unlocked) { send(res, 423, { error: '所有者尚未登录解锁, 共享数据暂时不可用' }); return null; }
-  if (!store.doc.tables[name]) { send(res, 404, { error: '表不存在: ' + name }); return null; }
+  // 先判授权再判存在: 否则未授权的人可以用 404/403 的差异探测全局表名
   const lvl = sharedTableLevel(user, name);
   if (!lvl) { send(res, 403, { error: '数据表 [' + name + '] 未授权给你' }); return null; }
   if (needWrite && lvl !== 'rw') { send(res, 403, { error: '数据表 [' + name + '] 对你是只读' }); return null; }
+  if (!store.doc.tables[name]) { send(res, 404, { error: '表不存在: ' + name }); return null; }
   return lvl;
 }
 
@@ -912,7 +1050,7 @@ route('GET', '/api/shared/fs/list', async (req, res, user) => {
   if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) return send(res, 404, { error: '目录不存在' });
   // 根目录下永远隐藏私有空间目录, 即便管理员把根目录 "" 授权出去
   const items = fs.readdirSync(abs)
-    .filter(f => !(rel === '' && f === PRIVATE_DIR))
+    .filter(f => !(rel === '' && f.toLowerCase() === PRIVATE_DIR))
     .map(f => {
       const full = path.join(abs, f);
       const st = fs.lstatSync(full);
@@ -1383,14 +1521,14 @@ async function handleApi(req, res, pathname) {
   if (!r) return send(res, 404, { error: 'API_NOT_FOUND' });
 
   // 公开路由
-  if (pathname === '/api/login' || pathname === '/api/register' || pathname === '/api/state' || pathname === '/api/theme' || pathname === '/api/logout') {
+  if (pathname === '/api/login' || pathname === '/api/register' || pathname === '/api/state' || pathname === '/api/theme' || pathname === '/api/logout' || pathname === '/api/update' || pathname === '/api/access') {
     return r.handlers[0](req, res);
   }
 
   const user = requireAuth(req, res);
   if (!user) return;
   if (SHARED_ROUTES.has(pathname)) {
-    // 共享视图只服务受限用户: 管理员本来就能直接读全局库与整棵文件树
+    // 共享视图只服务受限用户: 管理员读自己的全局库, 但同样进不了会员私有子树
     if (isAdmin(user)) return send(res, 403, { error: '共享视图面向受限用户; 最高权限账号请直接使用管理面板' });
   } else if (!isAdmin(user) && !MEMBER_ROUTES.has(pathname)) {
     return send(res, 403, { error: '权限不足: 该内容仅最高权限账号可见' });

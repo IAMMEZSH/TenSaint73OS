@@ -1,61 +1,111 @@
-TenSaint73OS - Owner Key (最高管理员身份密钥)
-================================================
+TenSaint73OS - Owner Key (supreme administrator identity)
+==========================================================
 
-为什么公开包里没有管理员账号
-----------------------------
-GitHub 上的公开安装包不包含任何管理员密码、手机号或认证库。
-如果把管理员凭据打进公开包，任何下载者都能解包、离线爆破或直接冒充管理员，
-这与“最高管理员信息绝对加密”的目标相反。
+Why the public package contains no administrator account
+--------------------------------------------------------
+The public package on GitHub contains no administrator password, phone number
+or auth vault. If administrator credentials were packaged, any downloader could
+unpack, brute-force offline or simply impersonate the administrator. That is the
+opposite of the goal: the supreme administrator identity stays encrypted.
 
-正确做法是“所有者密钥”：
-- 在你自己已有最高管理员的设备上导出一次；
-- 得到一个 .tsowner 文件（AES-256-GCM 加密，口令经 scrypt 派生）；
-- 在任意平台新安装的 TenSaint73OS 上导入这个文件；
-- 之后即可用原密码 + 绑定手机号登录最高管理员账号。
-公开包本身仍然只允许注册、登录、注销普通会员，普通会员无法获得管理员权限。
+The correct mechanism is the Owner Key:
+- export it once on the device that already has the supreme administrator;
+- you get a .tsowner file (AES-256-GCM, passphrase-derived with scrypt);
+- register that file in owner/OWNER.pin;
+- import the file on any TenSaint73OS installation on any platform;
+- sign in as the supreme administrator with the original password plus the
+  bound phone number.
+
+The public package on its own only allows registering, signing in and deleting
+ordinary members. A member cannot obtain the administrator role, and a build
+with an owner pin refuses every key except the registered one.
 
 
-一、导出（在有最高管理员的原设备上）
-------------------------------------
-先完全退出 TenSaint73OS（包括启动器和后台 node 进程），然后：
+1. Export (on the original device that has the administrator)
+------------------------------------------------------------
+Fully exit TenSaint73OS first, including the launcher and any background node
+process, then:
 
 Windows:
-  双击 owner\Export-Owner-Key.bat
+  double-click owner\Export-Owner-Key.bat
 Linux:
   sh owner/export-owner-key.sh
 Android (Termux) / iPhone/iPad (iSH):
   sh owner/export-owner-key.sh
 
-依次输入：管理员用户名、管理员密码、已绑定手机号（若已绑定）、
-以及一个至少 8 位的“所有者密钥口令”（输入两次）。
-完成后会在桌面（没有桌面则在家目录）生成：
-  TenSaint73OS-owner-日期-时间.tsowner
+Enter, in order: administrator username, administrator password, bound phone
+number (if bound), and an Owner Key passphrase of at least 8 characters (typed
+twice). The script creates, on the desktop (or in the home directory when no
+desktop exists):
+  TenSaint73OS-owner-YYYYMMDD-HHMM.tsowner
 
-安全要求：
-- 文件和口令必须分开保管（例如文件放 U 盘，口令记在密码管理器）。
-- 不要把 .tsowner 放进软件目录、公开网盘或 GitHub。
-- 忘记口令无法恢复，只能回原设备重新导出。
+Security requirements:
+- Keep the file and the passphrase separate (for example, file on a USB stick,
+  passphrase in a password manager).
+- Do not put .tsowner in the software directory, public storage or GitHub.
+- A forgotten passphrase cannot be recovered; export again from the original
+  device.
 
 
-二、导入（在任意平台的新设备上）
---------------------------------
-1. 安装并解压对应平台的 TenSaint73OS 包（Windows / Linux / Android / iPhone）。
-2. 不要先登录或注册；若程序已启动，先完全退出。
-3. 运行导入：
-   Windows: 双击 owner\Import-Owner-Key.bat
+2. Register the owner identity (once, from your own .tsowner)
+-------------------------------------------------------------
+Import is fail-closed: while owner/OWNER.pin is absent or has no pin, every
+import is refused. Register the pin from the key file you trust:
+
+Windows:
+  owner\Fingerprint-Owner-Key.bat "C:\path\to\TenSaint73OS-owner-....tsowner"
+Linux / Termux / iSH:
+  sh owner/fingerprint-owner-key.sh "/path/to/TenSaint73OS-owner-....tsowner"
+Node.js in any shell:
+  node owner/owner-vault.js fingerprint "/path/to/your.tsowner" --write
+
+Enter the Owner Key passphrase. The command writes owner/OWNER.pin:
+
+  OWNER_PIN=<64 lowercase hex characters>
+
+The pin is derived from the key's username + password salt + password hash.
+It holds no password, phone number or plaintext. It is portable: it belongs to
+the program directory, not to a computer. Commit it with your build (it is not
+a secret) and every device running that build accepts that one key file and no
+other. A build that ships without a pin refuses all imports.
+
+An existing, different pin is never overwritten. To rotate the owner identity,
+move owner/OWNER.pin aside on a machine you control and register the new key.
+
+
+3. Import (on a fresh device of any platform)
+---------------------------------------------
+1. Install and unpack the TenSaint73OS package for that platform
+   (Windows / Linux / Android / iPhone). Confirm owner/OWNER.pin is present.
+2. Do not sign in or register first. If the program is running, fully exit it.
+3. Run the import:
+   Windows: double-click owner\Import-Owner-Key.bat
    Linux / Termux / iSH: sh owner/import-owner-key.sh
-4. 输入 .tsowner 文件路径（可把文件拖进终端）和所有者密钥口令。
-5. 看到“最高管理员身份已导入”后，重新启动程序，用原密码 + 原手机号登录。
+4. Enter the .tsowner path (you can drag the file into the terminal) and the
+   Owner Key passphrase.
+5. After "supreme administrator identity imported" appears, restart the program
+   and sign in with the original password plus the original phone number.
 
-导入只在本机建立管理员身份；不会把原设备的文件、数据库或聊天记录搬过来。
-每台设备的数据仍然是独立、加密、互不影响的。若需要连数据一起迁移，
-请另外复制原设备的整个 data 目录（其中 install.salt 和 system.key 必须一起保留）。
+Import compares the key's fingerprint with owner/OWNER.pin. The registered file
+works on every platform and every device; a hand-made or foreign .tsowner has a
+different fingerprint and is rejected even if its JSON structure is valid.
+
+The import only creates the administrator identity on this machine. It does not
+move the original device's files, databases or records. Every device keeps an
+independent, encrypted data space. To migrate data as well, copy the original
+device's entire data directory separately; install.salt, auth.json and
+system.db must all be kept together.
 
 
-三、限制与保护
---------------
-- 导入只允许在“本机没有最高管理员”时执行；已有管理员会拒绝导入，避免覆盖。
-- 导入不覆盖同名普通会员；如冲突请先处理该账号。
-- 手机号会重新用本机安装密钥加密，登录时仍要求密码 + 手机号。
-- 导出的文件里没有明文用户名、密码、手机号；只有加密信封。
-- 本工具不会联网，也不会把任何内容上传到 GitHub 或第三方。
+4. Limits and protections
+-------------------------
+- Import is allowed only while this machine has no supreme administrator. If one
+  already exists, the import is refused so it cannot overwrite the account.
+- Import does not overwrite an ordinary member with the same name; resolve that
+  account first if there is a conflict.
+- The phone number is re-encrypted with this installation's key; sign-in still
+  requires password plus phone.
+- The exported file contains no plaintext username, password or phone number;
+  only the encrypted envelope. The pin contains no credentials either.
+- This tool performs no network access and uploads nothing to GitHub or any
+  third party.
