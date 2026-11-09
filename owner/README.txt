@@ -109,3 +109,10 @@ system.db must all be kept together.
   only the encrypted envelope. The pin contains no credentials either.
 - This tool performs no network access and uploads nothing to GitHub or any
   third party.
+- The passphrase is asked three times per run. If it keeps being rejected,
+  switch off the Chinese IME and type it instead of pasting it: pasted text can
+  carry invisible control sequences. Add --echo to see what is actually
+  captured (the passphrase is then visible on screen), e.g.
+  node owner/owner-vault.js fingerprint <file> --echo --write
+- The passphrase cannot be recovered. A new file can only be exported from a
+  deployment where the administrator account still signs in.

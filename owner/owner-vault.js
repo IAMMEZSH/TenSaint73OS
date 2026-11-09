@@ -46,6 +46,7 @@ function ask(q, hidden) {
     stdin.setEncoding('utf8');
     try { stdin.setRawMode(true); } catch (e) {}
     let buf = '';
+    let esc = false;    // 正在吞一个 ESC 序列: 方向键、功能键、粘贴括号标记都不能混进口令
     const cleanup = () => {
       stdin.removeListener('data', onData);
       try { stdin.setRawMode(false); } catch (e) {}
@@ -53,6 +54,11 @@ function ask(q, hidden) {
     };
     const onData = (chunk) => {
       for (const ch of chunk) {
+        if (esc) {
+          if (/[@-~]/.test(ch)) esc = false;
+          continue;
+        }
+        if (ch === '\u001b') { esc = true; continue; }
         if (ch === '\r' || ch === '\n') {
           cleanup();
           process.stdout.write('\n');
@@ -66,12 +72,18 @@ function ask(q, hidden) {
         }
         if (ch === '\u007f' || ch === '\b') {
           if (buf.length) {
-            buf = buf.slice(0, -1);
+            buf = Array.from(buf).slice(0, -1).join('');
             process.stdout.write('\b \b');
           }
           continue;
         }
+        if (ch === '\u0015') {          // Ctrl+U: 清空重输
+          buf = '';
+          process.stdout.write('\r' + q + ' '.repeat(24) + '\r' + q);
+          continue;
+        }
         if (ch.codePointAt(0) < 32) continue;
+        if (buf.length >= 4096) continue;
         buf += ch;
         process.stdout.write('*');
       }
@@ -180,14 +192,35 @@ function decryptOwner(doc, pass) {
   return u;
 }
 
+// 口令最多试三次: 输错通常是粘贴带入了不可见字符, 或中文输入法把按键吞掉了。
+// --echo 用可见输入复核一次, 屏幕上会显示口令本身, 只在排错时使用。
+async function askOwnerPass(doc) {
+  const echo = process.argv.includes('--echo');
+  if (echo) console.log('注意: --echo 会把口令原样显示在屏幕上, 只用于核对输入。');
+  let lastErr = null;
+  for (let i = 1; i <= 3; i++) {
+    const pass = await ask(i === 1 ? '所有者密钥口令 (输入以 * 显示): ' : `再试一次 (${i}/3): `, !echo);
+    try {
+      return decryptOwner(doc, pass);
+    } catch (e) {
+      lastErr = e;
+      if (i < 3) {
+        console.log('    ' + e.message);
+        console.log('    口令区分大小写; 输入时关闭中文输入法, 尽量不要粘贴 (粘贴可能带入不可见控制字符)。');
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function doFingerprint() {
   const args = process.argv.slice(3);
   const write = args.includes('--write');
   const typedPath = args.find((a) => !a.startsWith('--')) || await ask('所有者密钥文件路径: ');
   const file = typedPath.trim().replace(/^["']|["']$/g, '');
   const doc = readOwnerFile(file);
-  const pass = await ask('所有者密钥口令 (输入以 * 显示): ', true);
-  const u = decryptOwner(doc, pass);
+  console.log('提示: 输入完成按回车; 口令区分大小写, 最多试三次。');
+  const u = await askOwnerPass(doc);
 
   const fp = fingerprintOf(u);
   const existing = readPin();
@@ -273,7 +306,7 @@ async function doExport() {
 }
 
 async function doImport() {
-  console.log('提示: 口令输入时会显示 *, 输入完成按回车。');
+  console.log('提示: 口令输入时会显示 *, 输入完成按回车; 输错可重试三次。');
   await requireStopped();
 
   // 失败关闭: 没有登记身份指纹就一律拒绝导入, 避免任何自称所有者的密钥被接受。
@@ -289,8 +322,7 @@ async function doImport() {
   const file = typedPath.trim().replace(/^["']|["']$/g, '');
   const doc = readOwnerFile(file);
 
-  const pass = await ask('所有者密钥口令 (输入以 * 显示): ', true);
-  const u = decryptOwner(doc, pass);
+  const u = await askOwnerPass(doc);
 
   if (fingerprintOf(u) !== pin) {
     throw new Error('拒绝导入: 该 .tsowner 与 owner/OWNER.pin 登记的身份指纹不一致。\n' +
