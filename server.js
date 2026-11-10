@@ -590,7 +590,7 @@ route('GET', '/api/overview', async (req, res, user) => {
     features: store.doc.features.length,
     enabledFeatures: store.doc.features.filter(f => f.enabled).length,
     ips: listIps(), port: config.port,
-    urls: accessUrls(),
+    urls: await accessUrls(),
     locked: false,
   });
 });

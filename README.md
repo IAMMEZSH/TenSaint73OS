@@ -197,24 +197,24 @@ What *is* real:
 
 <table>
   <tr>
-    <td width="50%"><img src="screenshots/login.png" alt="Login"><br><sub><b>Login</b> — password plus optional bound-phone second factor.</sub></td>
-    <td width="50%"><img src="screenshots/admin-console.png" alt="Admin console"><br><sub><b>Admin console</b> — encrypted system database unlocked, live telemetry.</sub></td>
+    <td width="50%"><img src="screenshots/login.png?v=1.5.1" alt="Login"><br><sub><b>Login</b> — password plus optional bound-phone second factor.</sub></td>
+    <td width="50%"><img src="screenshots/admin-console.png?v=1.5.1" alt="Admin console"><br><sub><b>Admin console</b> — encrypted system database unlocked, live telemetry.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/database.png" alt="Global database browser"><br><sub><b>Global database</b> — the sole administrator browses the unlocked system store.</sub></td>
-    <td><img src="screenshots/grants.png" alt="Per-member grant dialog"><br><sub><b>Grant dialog</b> — per-table and per-directory read / read-write levels.</sub></td>
+    <td><img src="screenshots/database.png?v=1.5.1" alt="Global database browser"><br><sub><b>Global database</b> — the sole administrator browses the unlocked system store.</sub></td>
+    <td><img src="screenshots/grants.png?v=1.5.1" alt="Per-member grant dialog"><br><sub><b>Grant dialog</b> — per-table and per-directory read / read-write levels.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/shared-space.png" alt="Member shared space"><br><sub><b>Shared space</b> — a member sees only the granted tables and directories.</sub></td>
-    <td><img src="screenshots/shared-table.png" alt="Shared table opened read-write"><br><sub><b>Shared table</b> — row insert/edit/delete inside an <code>rw</code> grant; no DDL.</sub></td>
+    <td><img src="screenshots/shared-space.png?v=1.5.1" alt="Member shared space"><br><sub><b>Shared space</b> — a member sees only the granted tables and directories.</sub></td>
+    <td><img src="screenshots/shared-table.png?v=1.5.1" alt="Shared table opened read-write"><br><sub><b>Shared table</b> — row insert/edit/delete inside an <code>rw</code> grant; no DDL.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/shared-files.png" alt="Shared directory opened read-write"><br><sub><b>Shared directory</b> — upload, mkdir, download and delete inside the granted subtree.</sub></td>
-    <td><img src="screenshots/member-space.png" alt="Member space"><br><sub><b>Member space</b> — isolated per-user vault and workspace.</sub></td>
+    <td><img src="screenshots/shared-files.png?v=1.5.1" alt="Shared directory opened read-write"><br><sub><b>Shared directory</b> — upload, mkdir, download and delete inside the granted subtree.</sub></td>
+    <td><img src="screenshots/member-space.png?v=1.5.1" alt="Member space"><br><sub><b>Member space</b> — isolated per-user vault and workspace.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/member-account.png" alt="Account security"><br><sub><b>Account security</b> — role summary, password rotation and phone-binding second factor.</sub></td>
-    <td><img src="screenshots/tunnel.png" alt="Tunnel control"><br><sub><b>Tunnel control</b> — administrator-only Cloudflare tunnel opened from the console; the public URL is issued on demand.</sub></td>
+    <td><img src="screenshots/member-account.png?v=1.5.1" alt="Account security"><br><sub><b>Account security</b> — role summary, password rotation and phone-binding second factor.</sub></td>
+    <td><img src="screenshots/tunnel.png?v=1.5.1" alt="Tunnel control"><br><sub><b>Tunnel control</b> — administrator-only Cloudflare tunnel opened from the console; the public URL is issued on demand.</sub></td>
   </tr>
 </table>
 
@@ -226,7 +226,7 @@ The request path, the trust boundary and the two inbound rules are drawn once,
 in the figure below; the sections that follow add the details.
 
 <div align="center">
-  <img src="docs/architecture.svg" alt="Request path, trust boundary, ports and data directories" width="100%">
+  <img src="docs/architecture.svg?v=1.5.1" alt="Request path, trust boundary, ports and data directories" width="100%">
 </div>
 
 ### 5.1 Trust boundary
@@ -306,7 +306,7 @@ security key. Anyone who controls both the password and the bound SIM can log in
 ### 5.5 Per-user isolation
 
 <div align="center">
-  <img src="docs/isolation.svg" alt="Per-member isolation, the admin's 403 endpoints, path resolution and deletion" width="100%">
+  <img src="docs/isolation.svg?v=1.5.1" alt="Per-member isolation, the admin's 403 endpoints, path resolution and deletion" width="100%">
 </div>
 
 Each member gets:
@@ -345,7 +345,7 @@ software only on hardware you trust.
 ### 5.6 Data grants and the shared view
 
 <div align="center">
-  <img src="docs/grants.svg" alt="Grant model, member view, live revocation and the shared endpoint status table" width="100%">
+  <img src="docs/grants.svg?v=1.5.1" alt="Grant model, member view, live revocation and the shared endpoint status table" width="100%">
 </div>
 
 Isolation (§5.5) answers “who can see this member's data”. Grants answer the
@@ -446,7 +446,7 @@ Be explicit about the limits:
 ### 5.10 Owner key (`.tsowner`)
 
 <div align="center">
-  <img src="docs/owner-key.svg" alt="Owner-key export, the .tsowner envelope, import rules and the identity-versus-data boundary" width="100%">
+  <img src="docs/owner-key.svg?v=1.5.1" alt="Owner-key export, the .tsowner envelope, import rules and the identity-versus-data boundary" width="100%">
 </div>
 
 The owner key solves a specific problem: the public package cannot contain admin
@@ -477,7 +477,7 @@ passphrase never are.
 ## 6. Four platforms, one core
 
 <div align="center">
-  <img src="docs/platforms.svg" alt="Windows, Linux, Termux and iSH command cards with the exact launcher commands" width="100%">
+  <img src="docs/platforms.svg?v=1.5.1" alt="Windows, Linux, Termux and iSH command cards with the exact launcher commands" width="100%">
 </div>
 
 | | Windows | Linux | Android | iPhone / iPad |
@@ -804,7 +804,7 @@ back into the history. Stopping the tunnel from the console does the same, and a
 tunnel that has gone offline is never re-added automatically.
 
 <div align="center">
-  <img src="docs/tunnel-flow.svg" alt="Outbound tunnel sequence, the publishing path, run-online.sh and the named-tunnel alternative" width="100%">
+  <img src="docs/tunnel-flow.svg?v=1.5.1" alt="Outbound tunnel sequence, the publishing path, run-online.sh and the named-tunnel alternative" width="100%">
 </div>
 
 ### 9.2 The fine print
@@ -963,7 +963,7 @@ Do not expose port 7373 directly. Plain HTTP would send passwords in the clear.
 ### 11.1 Data layout
 
 <div align="center">
-  <img src="docs/data-layout.svg" alt="The data directory tree, plaintext versus sealed files, restore-as-one-set, backup commands and update survival" width="100%">
+  <img src="docs/data-layout.svg?v=1.5.1" alt="The data directory tree, plaintext versus sealed files, restore-as-one-set, backup commands and update survival" width="100%">
 </div>
 
 ```text
