@@ -1,4 +1,4 @@
-TenSaint73OS · The Saint Key Protocol · v1.5.0
+TenSaint73OS · The Saint Key Protocol · v1.5.1
 ============================================================
 
 A zero-dependency, fully local encrypted private space:
@@ -108,6 +108,10 @@ nothing is synchronized automatically.
   The tunnel obtains a fresh HTTPS hostname from Cloudflare at runtime and
   publishes it in the platform URL board. Closing the tunnel invalidates that
   hostname immediately; no fixed address is shipped in this package.
+  The login page shows the address only while the tunnel is running, and says
+  "tunnel off, address not published" otherwise, so an address left over from an
+  earlier run is never displayed. Clearing the URL board also deletes the saved
+  hostname: a refresh does not bring a dead address back.
 - You can also run ./run-online.sh for a command-line tunnel (fixed HTTP/2 +
   IPv4).
 - After replacing or upgrading program files, fully exit and restart the

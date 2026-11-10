@@ -1,6 +1,6 @@
 {
   "name": "tensaint73os",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "TenSaint73OS · 圣钥协议管理系统",
   "main": "server.js",
   "private": true,

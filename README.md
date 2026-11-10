@@ -11,7 +11,7 @@ A local-first, zero-dependency, encrypted multi-user workspace that runs on Wind
   <code>AES-256-GCM</code> · <code>scrypt</code> · <code>PER-USER VAULTS</code> · <code>PHONE 2FA</code> · <code>OWNER KEY</code> · <code>OPTIONAL CLOUDFLARE TUNNEL</code>
 </p>
 
-<p align="center"><strong>Version 1.5.0</strong> · Node.js 18+ · no npm runtime dependencies · no telemetry · no cloud account</p>
+<p align="center"><strong>Version 1.5.1</strong> · Node.js 18+ · no npm runtime dependencies · no telemetry · no cloud account</p>
 
 > **Public builds are member-only on first launch.**
 > They contain **no admin account, no real database and no keys**.
@@ -174,8 +174,8 @@ What *is* real:
 
 - Loopback-only by default.
 - Admin-only, in-console Cloudflare Quick Tunnel: install, start, stop.
-- Ephemeral HTTPS hostname allocated by Cloudflare Quick Tunnel at runtime, also
-  recorded in the URL board.
+- Ephemeral HTTPS hostname allocated by Cloudflare Quick Tunnel at runtime,
+  recorded in the URL board and published on the login page while it is live.
 - Optional named tunnel configuration for a stable hostname (requires your own
   Cloudflare account and domain).
 - No inbound port forwarding is required.
@@ -765,7 +765,7 @@ files, so these values do not constrain a member's own space.
 - Connection close — a body above 50 MB is refused before routing, so nothing is
   written to disk.
 
-These are the defaults for v1.5.0. The constants live in `core/auth.js`
+These are the defaults for v1.5.1. The constants live in `core/auth.js`
 (`SESSION_TTL`), `core/userstore.js` (`MAX_*`), `core/store.js` (log and URL
 caps) and `server.js` (body cap and rate limit).
 
@@ -785,13 +785,23 @@ The URL is written to the URL board and `data/tunnel.url`. It works globally:
 any device with internet can open it and reach the login page. No router port
 forwarding, public IP or DNS record is required.
 
-**The login page publishes the address.** A read-only line under the login form
-shows the current tunnel URL whenever the server has one, with a copy button.
-It is rendered from `GET /api/access`, which only reads the already-generated
-value (`tunnelState`, `data/public_url.txt`, `data/tunnel.url`, or
-`TS_PUBLIC_URL`). The tunnel mechanism itself is unchanged: the URL is still
-created by `cloudflared`, still random, and still expires when the tunnel stops.
+**The login page publishes the address only while the tunnel is live.** A
+read-only line under the login form shows the current tunnel URL with a copy
+button while the tunnel is running, and reads "Tunnel off · address not
+published" (隧道未开启 · 不公布地址) otherwise. It is rendered from
+`GET /api/access`, which returns the already-generated value (`tunnelState`,
+`data/public_url.txt`, `data/tunnel.url`, or `TS_PUBLIC_URL`) only after
+confirming the tunnel is online: an in-console tunnel is known from its process,
+and a tunnel started by `run-online.sh` is confirmed with one lightweight probe,
+cached for 60 seconds. An address left on disk by an earlier run is not
+published. The tunnel mechanism itself is unchanged: the URL is still created by
+`cloudflared`, still random, and still expires when the tunnel stops.
 `GET /api/access` contains no account, file or database information.
+
+Clearing the URL board (**清空历史**) now sticks: the last saved hostname is
+removed together with the records, so a refresh no longer imports a dead address
+back into the history. Stopping the tunnel from the console does the same, and a
+tunnel that has gone offline is never re-added automatically.
 
 <div align="center">
   <img src="docs/tunnel-flow.svg" alt="Outbound tunnel sequence, the publishing path, run-online.sh and the named-tunnel alternative" width="100%">
@@ -1393,6 +1403,6 @@ with or endorsed by them.
 ---
 
 <div align="center">
-  <sub>TENSAINT73OS · THE SAINT KEY PROTOCOL · V1.5.0</sub><br>
+  <sub>TENSAINT73OS · THE SAINT KEY PROTOCOL · V1.5.1</sub><br>
   <sub>LOCAL-FIRST · ENCRYPTED · ZERO-DEPENDENCY · FOUR PLATFORMS</sub>
 </div>

@@ -26,7 +26,7 @@ const USERDATA = path.join(DATA, 'users');
 const USER_FILES = path.join(FILES, 'users');
 const PUBLIC = path.join(ROOT, 'public');
 const SYSTEM_NAME = 'TenSaint73OS';
-const VERSION = '1.5.0';
+const VERSION = '1.5.1';
 // 官方发行页 (更新提示用; 隧道地址仍由 cloudflared 随机生成, 这里不写死任何公网地址)
 const OFFICIAL_URL = 'https://github.com/IAMMEZSH/TenSaint73OS';
 const RELEASES_URL = OFFICIAL_URL + '/releases/latest';
@@ -480,15 +480,15 @@ route('GET', '/api/theme', async (req, res) => {
 });
 
 // 更新提示与平台内公布的隧道地址: 只读, 不含账号/数据。隧道地址仍由 cloudflared 随机生成。
-function currentPublicUrl() {
-  if (tunnelState.url) return tunnelState.url;
+// 这里只读出上次落盘的地址, 是否对外公布由 tunnelPublication() 按隧道是否在线决定。
+function tunnelUrlFile() {
   for (const f of [path.join(DATA, 'public_url.txt'), path.join(DATA, 'tunnel.url')]) {
     try {
       const u = fs.readFileSync(f, 'utf8').split('\n')[0].trim();
       if (/^https:\/\/\S+$/i.test(u)) return u;
     } catch (e) { /* 还没生成 */ }
   }
-  return process.env.TS_PUBLIC_URL || '';
+  return String(process.env.TS_PUBLIC_URL || '').trim();
 }
 
 // 旧版本痕迹: 只看本机是否已经有加密库/会员空间/隧道记录。
@@ -558,9 +558,11 @@ route('GET', '/api/update', async (req, res) => {
 });
 
 route('GET', '/api/access', async (req, res) => {
+  const pub = await tunnelPublication();
   send(res, 200, {
     version: VERSION,
-    tunnel_url: currentPublicUrl(),
+    tunnel_url: pub.url,
+    tunnel_state: pub.state,
     official_url: RELEASES_URL,
   });
 });
@@ -1183,12 +1185,11 @@ function listIps() {
   return out;
 }
 
-function accessUrls() {
-  syncTunnelUrl();
+async function accessUrls() {
+  await syncTunnelUrl();
   const out = [];
-  const cur = store.unlocked ? (store.doc.urls || []).find(u => u.current) : null;
-  if (cur) out.push({ label: '全球访问 (隧道)', url: cur.url });
-  else if (process.env.TS_PUBLIC_URL) out.push({ label: '全球访问 (隧道)', url: process.env.TS_PUBLIC_URL });
+  const pub = await tunnelPublication();
+  if (pub.url) out.push({ label: '全球访问 (隧道)', url: pub.url });
   out.push({ label: '本机访问', url: `http://localhost:${config.port}` });
   if (!LOOPBACK_ONLY) for (const i of listIps()) out.push({ label: `局域网 [${i.name}]`, url: `http://${i.address}:${config.port}` });
   return out;
@@ -1200,7 +1201,7 @@ route('GET', '/api/network', async (req, res, user) => {
     port: config.port,
     ips: listIps(),
     online: true,
-    urls: accessUrls(),
+    urls: await accessUrls(),
   });
 });
 
@@ -1222,13 +1223,13 @@ function cleanUrl(raw) {
   return s;
 }
 
-function syncTunnelUrl() {
+// 只把在线隧道记入历史: 已失效的地址不会在下次刷新时又冒出来。
+async function syncTunnelUrl() {
   if (!store.unlocked) return;
-  let raw = '';
-  try { raw = fs.readFileSync(TUNNEL_URL_FILE, 'utf8'); } catch (e) { return; }
-  const url = String(raw).split('\n')[0].trim();
-  if (!/^https:\/\/\S+$/i.test(url)) return;
+  const url = tunnelUrlFile();
+  if (!url) return;
   if ((store.doc.urls || []).some(u => u.url === url)) return;
+  if (!(await tunnelLive(url, true))) return;
   store.addUrl({ url, name: '隧道地址', note: `由 run-online.sh 于 ${new Date().toLocaleString('zh-CN')} 自动上报`, source: '自动', current: true });
   store.log('info', `新的对外地址已记入网址板块: ${url}`);
 }
@@ -1236,6 +1237,65 @@ function syncTunnelUrl() {
 /* ---------------- 平台内隧道开关 (管理员) ---------------- */
 const TUNNEL_DIR = path.join(ROOT, 'tools');
 const tunnelState = { proc: null, running: false, url: '', startedAt: 0, error: '', exitCode: null, log: [] };
+
+// 隧道在线判定: 平台内开关直接看进程状态; 由 run-online.sh 在外部启动的隧道用一次
+// 轻量探测确认 (结果缓存 60 秒)。关闭或失效后不再把上次的随机地址对外公布。
+const tunnelProbe = { url: '', at: 0, live: false, pending: null };
+
+function probeTunnel(url) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (live) => {
+      if (settled) return;
+      settled = true;
+      tunnelProbe.url = url; tunnelProbe.at = Date.now(); tunnelProbe.live = live;
+      resolve(live);
+    };
+    let req;
+    try {
+      req = https.get(url.replace(/\/+$/, '') + '/api/theme', { timeout: 4000, headers: { 'User-Agent': 'TenSaint73OS' } }, (r) => {
+        r.resume();
+        done(r.statusCode >= 200 && r.statusCode < 400);
+      });
+    } catch (e) { done(false); return; }
+    req.on('timeout', () => { req.destroy(); done(false); });
+    req.on('error', () => done(false));
+  });
+}
+
+// wait=false 只负责发起探测, 立即返回 false, 让调用方下一轮再问。
+function tunnelLive(url, wait) {
+  if (!url) return Promise.resolve(false);
+  if (tunnelState.running && tunnelState.url === url) return Promise.resolve(true);
+  if (tunnelProbe.url === url && Date.now() - tunnelProbe.at < 60000) return Promise.resolve(tunnelProbe.live);
+  if (!tunnelProbe.pending) tunnelProbe.pending = probeTunnel(url).finally(() => { tunnelProbe.pending = null; });
+  return wait ? tunnelProbe.pending : Promise.resolve(false);
+}
+
+const TUNNEL_OFF_TEXT = { url: '', state: 'off' };
+
+// 对外公布用: 未确认前返回 checking, 确认不在线返回 off, 只有在线才给出地址。
+async function tunnelPublication() {
+  if (tunnelState.running) return { url: tunnelState.url || '', state: tunnelState.url ? 'running' : 'starting' };
+  const url = tunnelUrlFile();
+  if (!url) return TUNNEL_OFF_TEXT;
+  if (tunnelProbe.url === url && Date.now() - tunnelProbe.at < 60000) {
+    return tunnelProbe.live ? { url, state: 'running' } : TUNNEL_OFF_TEXT;
+  }
+  tunnelLive(url, false);
+  return { url: '', state: 'checking' };
+}
+
+// 删除/清空历史或关闭隧道时, 连同上次落盘的地址一起忘掉, 避免刷新后又出现。
+function forgetTunnelUrl(url) {
+  for (const f of [TUNNEL_URL_FILE, path.join(DATA, 'public_url.txt')]) {
+    try {
+      const cur = fs.readFileSync(f, 'utf8').split('\n')[0].trim();
+      if (cur && (!url || cur === url)) fs.unlinkSync(f);
+    } catch (e) { /* 没有这个文件 */ }
+  }
+  tunnelProbe.url = ''; tunnelProbe.at = 0; tunnelProbe.live = false;
+}
 
 function cloudflaredName() { return process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared'; }
 
@@ -1334,6 +1394,7 @@ function stopTunnel() {
   tunnelState.startedAt = 0;
   tunnelState.url = '';
   tunnelState.error = '';
+  forgetTunnelUrl();
   if (child) { try { child.kill(); } catch (e) { /* 忽略 */ } }
 }
 
@@ -1420,7 +1481,7 @@ route('POST', '/api/tunnel/install', async (req, res) => {
 
 route('GET', '/api/urls', async (req, res, user) => {
   if (!requireFeature(res, 'urls')) return;
-  syncTunnelUrl();
+  await syncTunnelUrl();
   const list = store.listUrls();
   send(res, 200, {
     urls: list,
@@ -1441,7 +1502,9 @@ route('POST', '/api/urls/add', async (req, res, user) => {
 
 route('POST', '/api/urls/delete', async (req, res, user) => {
   const { id } = await readBody(req);
-  try { store.removeUrl(String(id || '')); } catch (e) { return send(res, 400, { error: e.message }); }
+  let gone;
+  try { gone = store.removeUrl(String(id || '')); } catch (e) { return send(res, 400, { error: e.message }); }
+  if (gone) forgetTunnelUrl(gone.url);
   send(res, 200, { ok: true });
 });
 
@@ -1453,6 +1516,7 @@ route('POST', '/api/urls/current', async (req, res, user) => {
 
 route('POST', '/api/urls/clear', async (req, res, user) => {
   const n = store.clearUrls();
+  forgetTunnelUrl();
   send(res, 200, { ok: true, removed: n });
 });
 

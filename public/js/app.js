@@ -751,7 +751,7 @@ async function enterAdmin(st, afterLogin) {
   const sideUser = $('#side-user');
   if (sideUser) sideUser.innerHTML = `<b>${esc(S.username)}</b><span>ROOT ADMINISTRATOR</span>`;
   const ver = $('#side-ver');
-  if (ver) ver.textContent = 'OS v' + (st.version || '1.5.0') + ' · ADMIN';
+  if (ver) ver.textContent = 'OS v' + (st.version || '1.5.1') + ' · ADMIN';
   await buildSidebar();
   navigate('dashboard');
   startTicker();
@@ -2069,7 +2069,7 @@ async function renderSettings(c) {
 async function renderAbout(c) {
   c.innerHTML = '';
   let st;
-  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.5.0' }; }
+  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.5.1' }; }
   const card = el('div', 'card');
   card.innerHTML = `<div style="text-align:center;padding:18px 8px">
     <div style="position:relative;width:130px;height:130px;margin:0 auto">
@@ -2078,7 +2078,7 @@ async function renderAbout(c) {
     <h2 style="margin-top:18px;letter-spacing:5px;color:var(--primary)">TENSAINT<span style="color:var(--text)">73</span>OS</h2>
     <div style="font-size:9px;color:var(--dim);letter-spacing:3px;margin-top:7px">圣钥协议 · SANCTUM KEY PROTOCOL</div>
     <div class="mono-list" style="text-align:left;margin-top:24px;line-height:2.2">
-      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.5.0')}</span></div>
+      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.5.1')}</span></div>
       <div><span class="k">数据库加密</span><span class="v">AES-256-GCM · 管理员库 / 会员库双轨</span></div>
       <div><span class="k">权限模型</span><span class="v">管理员全局 · 会员仅见自己的文件与数据表</span></div>
       <div><span class="k">文件隔离</span><span class="v">每个账号独立虚拟根目录, 接口层强制隔离</span></div>
@@ -2518,7 +2518,7 @@ async function renderAdminAccount(c) {
     <div class="node-tag">${esc(S.nodeId || 'TS73-······')}</div>
     <div style="margin-top:18px">
       <div class="identity-row"><span>角色</span><b>ROOT ADMINISTRATOR</b></div>
-      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.5.0')}</b></div>
+      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.5.1')}</b></div>
       <div class="identity-row"><span>全局数据库</span><b>${st.locked ? '加密锁定' : '已解锁 · AES-256-GCM'}</b></div>
       <div class="identity-row"><span>会话策略</span><b>12h 滑动过期</b></div>
     </div>`;
@@ -2605,22 +2605,31 @@ async function loadUpdateNotice() {
 }
 
 // 平台内公布隧道地址: 只读取 cloudflared 已生成的结果, 不参与生成, 也不改写隧道机制。
-async function loadAccessUrl(attempt) {
+// 隧道没开或地址已失效时不公布, 只在在线时显示随机地址。
+async function loadAccessUrl() {
   const a = $('#access-url'), btn = $('#access-copy');
   if (!a) return;
+  const login = $('#login-screen');
+  if (!login || login.classList.contains('hidden')) {
+    // 启动动画期间登录页尚未显示, 稍后再问; 已登录则不再需要这行地址。
+    let token = '';
+    try { token = localStorage.getItem('ts73_token') || ''; } catch (e) { /* 隐私模式 */ }
+    if (!token) setTimeout(loadAccessUrl, 1500);
+    return;
+  }
   let data;
-  try { const r = await rawApi('GET', '/api/access'); data = r.data; } catch (e) { return; }
+  try { const r = await rawApi('GET', '/api/access'); data = r.data; } catch (e) { setTimeout(loadAccessUrl, 20000); return; }
   const url = data && data.tunnel_url;
   if (!url) {
-    a.textContent = '隧道尚未分配, 稍后刷新页面';
+    const st = (data && data.tunnel_state) || 'off';
+    a.textContent = st === 'checking' ? '正在确认隧道状态…'
+      : st === 'starting' ? '隧道启动中, 稍后刷新…'
+        : '隧道未开启 · 不公布地址';
     a.classList.add('pending');
     a.removeAttribute('href');
     a.removeAttribute('target');
     if (btn) btn.disabled = true;
-    const login = $('#login-screen');
-    if (!login || login.classList.contains('hidden')) return;
-    const n = attempt || 0;
-    if (n < 8) setTimeout(() => loadAccessUrl(n + 1), 12000);
+    setTimeout(loadAccessUrl, st === 'checking' || st === 'starting' ? 6000 : 20000);
     return;
   }
   a.textContent = url;
@@ -2724,7 +2733,7 @@ async function checkSession() {
   }
   await bootPromise;
   loadUpdateNotice();
-  loadAccessUrl(0);
+  loadAccessUrl();
   startTicker();
   if (st && st.role === 'admin') {
     await enterAdmin(st);
