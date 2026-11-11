@@ -698,6 +698,7 @@ function showLoginScreen() {
   if (ph) ph.value = '';
   clearLoginError();
   setAuthMode(S.authMode === 'register' && S.registrationOpen ? 'register' : 'login');
+  loadAccessUrl();
   setTimeout(() => { const f = $('#login-user'); if (f && !f.value) f.focus(); }, 100);
 }
 
@@ -2606,7 +2607,9 @@ async function loadUpdateNotice() {
 
 // 平台内公布隧道地址: 只读取 cloudflared 已生成的结果, 不参与生成, 也不改写隧道机制。
 // 隧道没开或地址已失效时不公布, 只在在线时显示随机地址。
+let accessPollTimer = null;
 async function loadAccessUrl() {
+  if (accessPollTimer) { clearTimeout(accessPollTimer); accessPollTimer = null; }
   const a = $('#access-url'), btn = $('#access-copy');
   if (!a) return;
   const login = $('#login-screen');
@@ -2614,11 +2617,11 @@ async function loadAccessUrl() {
     // 启动动画期间登录页尚未显示, 稍后再问; 已登录则不再需要这行地址。
     let token = '';
     try { token = localStorage.getItem('ts73_token') || ''; } catch (e) { /* 隐私模式 */ }
-    if (!token) setTimeout(loadAccessUrl, 1500);
+    if (!token) accessPollTimer = setTimeout(loadAccessUrl, 1500);
     return;
   }
   let data;
-  try { const r = await rawApi('GET', '/api/access'); data = r.data; } catch (e) { setTimeout(loadAccessUrl, 20000); return; }
+  try { const r = await rawApi('GET', '/api/access'); data = r.data; } catch (e) { accessPollTimer = setTimeout(loadAccessUrl, 20000); return; }
   const url = data && data.tunnel_url;
   if (!url) {
     const st = (data && data.tunnel_state) || 'off';
@@ -2629,7 +2632,7 @@ async function loadAccessUrl() {
     a.removeAttribute('href');
     a.removeAttribute('target');
     if (btn) btn.disabled = true;
-    setTimeout(loadAccessUrl, st === 'checking' || st === 'starting' ? 6000 : 20000);
+    accessPollTimer = setTimeout(loadAccessUrl, st === 'checking' || st === 'starting' ? 6000 : 20000);
     return;
   }
   a.textContent = url;
@@ -2656,6 +2659,7 @@ async function loadAccessUrl() {
       } catch (e) { toast('复制失败, 请手动选择地址', true); }
     };
   }
+  accessPollTimer = setTimeout(loadAccessUrl, 20000);
 }
 
 function bindStatic() {
