@@ -19,6 +19,7 @@ const BUILTIN_FEATURES = [
   { id: 'database',  name: '数据库', icon: '⛁', desc: '数据表管理与增删改查', builtin: true },
   { id: 'files',     name: '文件',   icon: '▤', desc: '系统文件仓库管理', builtin: true },
   { id: 'users',     name: '用户',   icon: '☗', desc: '用户与权限阶级管理', builtin: true },
+  { id: 'usage',     name: '用户统计', icon: '◎', desc: '注册账号数量与使用活跃度', builtin: true },
   { id: 'account',   name: '账户安全', icon: '⬡', desc: '密码与安全手机号绑定', builtin: true },
   { id: 'features',  name: '功能',   icon: '⚙', desc: '功能模块开关与新增', builtin: true },
   { id: 'theme',     name: '主题',   icon: '✦', desc: '界面外观定制', builtin: true },

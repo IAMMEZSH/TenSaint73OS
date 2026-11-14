@@ -27,6 +27,9 @@ const S = {
   authMode: 'login',
   palette: null,
   tick: {},
+  usageTimer: null,
+  pingTimer: null,
+  visitTimer: null,
 };
 
 const $ = s => document.querySelector(s);
@@ -682,6 +685,7 @@ async function doRegister(e) {
 }
 
 function showLoginScreen() {
+  stopHeartbeat();
   const boot = $('#boot-screen');
   if (boot) { boot.classList.add('hidden'); boot.style.display = 'none'; }
   $('#app').classList.add('hidden');
@@ -699,10 +703,12 @@ function showLoginScreen() {
   clearLoginError();
   setAuthMode(S.authMode === 'register' && S.registrationOpen ? 'register' : 'login');
   loadAccessUrl();
+  startVisitHeartbeat();
   setTimeout(() => { const f = $('#login-user'); if (f && !f.value) f.focus(); }, 100);
 }
 
 function doLogout(silent) {
+  stopHeartbeat();
   const token = S.token;
   if (token) {
     fetch('/api/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + token } }).catch(() => {});
@@ -734,6 +740,7 @@ async function enterAdmin(st, afterLogin) {
       if (s2 && s2.features) st = Object.assign({}, st, s2);
     } catch (e) { /* 取不到就沿用登录响应 */ }
   }
+  stopVisitHeartbeat();
   S.role = 'admin';
   S.username = st.username;
   S.nodeId = st.nodeId || S.nodeId || '';
@@ -752,15 +759,17 @@ async function enterAdmin(st, afterLogin) {
   const sideUser = $('#side-user');
   if (sideUser) sideUser.innerHTML = `<b>${esc(S.username)}</b><span>ROOT ADMINISTRATOR</span>`;
   const ver = $('#side-ver');
-  if (ver) ver.textContent = 'OS v' + (st.version || '1.5.1') + ' · ADMIN';
+  if (ver) ver.textContent = 'OS v' + (st.version || '1.6.0') + ' · ADMIN';
   await buildSidebar();
   navigate('dashboard');
   startTicker();
+  startHeartbeat();
   if (afterLogin) toast('圣钥认证通过 · 欢迎回来, 掌控者');
 }
 
 async function enterMember(st) {
   hideUpdateBanner();
+  stopVisitHeartbeat();
   S.role = 'user';
   S.username = st.username;
   S.nodeId = st.nodeId || '';
@@ -784,6 +793,7 @@ async function enterMember(st) {
   if (node) node.textContent = S.nodeId || 'TS73-······';
   await memberNavigate('overview');
   startTicker();
+  startHeartbeat();
   toast('私人节点已解锁 · 文件与数据与其他用户完全隔离');
 }
 
@@ -794,6 +804,7 @@ const MODULES = {
   database: { title: '数据库', render: renderDatabase },
   files: { title: '文件仓库', render: renderFiles },
   users: { title: '用户管理', render: renderUsers },
+  usage: { title: '用户统计', render: renderUsage },
   account: { title: '账户安全', render: renderAdminAccount },
   features: { title: '功能模块', render: renderFeatures },
   theme: { title: '主题定制', render: renderTheme },
@@ -901,6 +912,38 @@ function startTicker() {
   if (!tickerTimer) tickerTimer = setInterval(updateTicker, 1000);
   updateTicker();
 }
+
+/* ---------------- 在线心跳 (管理员与会员共用) ----------------
+   登录后每 20 秒发一次; 切回前台立即补一次。服务端以 90 秒窗口判定在线,
+   因此任何打开着平台页面的账号都会被统计到, 不依赖是否正好点了某个模块。 */
+function startHeartbeat() {
+  stopHeartbeat();
+  const beat = () => {
+    if (!S.token) return;
+    rawApi('GET', '/api/ping').catch(() => {});
+  };
+  beat();
+  S.pingTimer = setInterval(beat, 20000);
+}
+function stopHeartbeat() {
+  if (S.pingTimer) { clearInterval(S.pingTimer); S.pingTimer = null; }
+}
+/* 未登录访客心跳: 登录页同样每 20 秒标记一次访问, 让管理端能看到
+   "打开了页面但未登录"的人; 不带任何令牌, 也不读取任何数据。 */
+function startVisitHeartbeat() {
+  stopVisitHeartbeat();
+  const beat = () => { rawApi('GET', '/api/visit', undefined, '').catch(() => {}); };
+  beat();
+  S.visitTimer = setInterval(beat, 20000);
+}
+function stopVisitHeartbeat() {
+  if (S.visitTimer) { clearInterval(S.visitTimer); S.visitTimer = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (S.token) rawApi('GET', '/api/ping').catch(() => {});
+  else if (S.visitTimer) rawApi('GET', '/api/visit', undefined, '').catch(() => {});
+});
 function updateTicker() {
   const now = new Date().toLocaleString('zh-CN', { hour12: false });
   ['#tb-clock', '#tb-clock2', '#m-clock', '#m-clock2'].forEach(sel => {
@@ -1531,6 +1574,119 @@ async function renderUsers(c) {
   await refresh();
 }
 
+/* ---- 用户统计 ---- */
+async function renderUsage(c) {
+  c.innerHTML = '';
+  if (S.usageTimer) { clearInterval(S.usageTimer); S.usageTimer = null; }
+
+  const bar = el('div', 'file-toolbar');
+  const refreshBtn = el('button', 'btn', '↻ 刷新');
+  bar.appendChild(refreshBtn);
+  bar.appendChild(el('span', 'crumb', '只统计账号、登录与未登录访问 · 会员私有文件、数据表与内容始终隔离, 不在此处展示'));
+  c.appendChild(bar);
+  const box = el('div');
+  c.appendChild(box);
+
+  let busy = false;
+  async function refresh() {
+    if (busy) return;
+    busy = true;
+    try {
+      let d;
+      try { d = await api('GET', '/api/usage'); }
+      catch (e) {
+        box.innerHTML = '';
+        box.appendChild(el('div', 'empty-tip', esc(e.message)));
+        return;
+      }
+      box.innerHTML = '';
+      const total = Math.max(1, d.total);
+      const onlineWin = d.onlineWindowSeconds || 90;
+      const vd = d.visitors || { total: 0, online: 0, denied: 0, failedLogins: 0, retentionDays: 30, list: [] };
+      const sg = el('div', 'stat-grid');
+      sg.appendChild(statCard('注册账号', d.total + ' 个', '☗', `${d.members} 名会员 · ${d.admins} 名管理员`, clamp(d.total * 8, 8, 100)));
+      sg.appendChild(statCard('正在使用', d.online + ' 个', '◉', `最近 ${onlineWin} 秒内有页面心跳或接口访问`, d.online / total * 100));
+      sg.appendChild(statCard('已登录', d.loggedIn + ' 个', '⌂', `持有有效会话 · ${d.sessions} 个终端`, d.loggedIn / total * 100));
+      sg.appendChild(statCard('今日活跃', d.active24h + ' 个', '◷', '最近 24 小时有访问', d.active24h / total * 100));
+      sg.appendChild(statCard('7 日活跃', d.active7d + ' 个', '≣', '最近 7 天有访问', d.active7d / total * 100));
+      sg.appendChild(statCard('从未登录', d.neverLoggedIn + ' 个', '⊘', '账号已创建, 但还没有登录记录', d.neverLoggedIn / total * 100));
+      sg.appendChild(statCard('未登录访客', vd.total + ' 个', '◇', `${vd.retentionDays || 30} 天内打开过登录页 · ${vd.online} 个正在访问`, vd.total ? clamp(vd.total * 8, 8, 100) : 0));
+      sg.appendChild(statCard('未认证请求', vd.denied + ' 次', '⚑', '无有效会话访问受保护接口 · 全部已拒绝', vd.denied ? 100 : 0));
+      box.appendChild(sg);
+
+      section(box, '账号使用明细');
+      const card = el('div', 'card');
+      card.innerHTML = `<div class="card-title">账号列表 (${d.total}) · 全量</div>
+        <div class="card-small">数据时间 ${esc(fmtTime(d.generatedAt))} · 每 10 秒自动刷新 · 在线窗口 ${onlineWin} 秒 · 页面每 20 秒心跳。全部账号逐行列出, 不分页、不抽样; 只含账号名与登录活动, 不包含任何私有文件、数据表、表名或内容。</div>`;
+      const tbl = el('table', 'tbl');
+      tbl.innerHTML = '<tr><th>账号名</th><th>身份</th><th>来源</th><th>注册时间</th><th>最近登录</th><th>最近活跃</th><th>登录次数</th><th>状态</th></tr>';
+      const srcMap = { self: '自助注册', admin: '管理员创建', owner: '所有者导入', legacy: '历史账号' };
+      const fmtOr = (v) => v ? esc(fmtTime(v)) : '—';
+      for (const u of d.users) {
+        const tr = el('tr');
+        const roleTag = u.role === 'admin' ? '<span class="tag on">最高权限</span>' : '<span class="tag">会员</span>';
+        const n = u.sessions || 0;
+        const stateTag = u.online
+          ? `<span class="tag on">在线 · ${n} 终端</span>`
+          : u.loggedIn ? `<span class="tag">已登录 · ${n} 终端</span>` : '<span class="tag off">离线</span>';
+        const lastLogin = u.lastLoginAt ? esc(fmtTime(u.lastLoginAt)) : '<span class="tag off">从未登录</span>';
+        tr.innerHTML = `<td>${esc(u.username)}</td><td>${roleTag}</td><td>${esc(srcMap[u.createdBy] || u.createdBy || '—')}</td>
+          <td>${fmtOr(u.createdAt)}</td><td>${lastLogin}</td><td>${fmtOr(u.lastSeenAt)}</td>
+          <td>${esc(String(u.loginCount || 0))}</td><td>${stateTag}</td>`;
+        tbl.appendChild(tr);
+      }
+      card.appendChild(tbl);
+      box.appendChild(card);
+
+      section(box, '未登录访问明细');
+      const vcard = el('div', 'card');
+      const vdays = vd.retentionDays || 30;
+      vcard.innerHTML = `<div class="card-title">未登录访客 (${vd.total}) · 全量</div>
+        <div class="card-small">按 IP + 浏览器归并, 保留 ${vdays} 天; 浏览器一旦登录会自动移出此表, 只保留未登录访问。未登录只能看到登录页; 任何数据接口在没有有效会话时一律返回 401, 并累计到「未认证请求」。此表只含网络与访问元数据, 不含任何输入内容、账号、文件或数据表。</div>`;
+      const vtbl = el('table', 'tbl');
+      vtbl.innerHTML = '<tr><th>来源</th><th>客户端</th><th>首次访问</th><th>最近访问</th><th>打开页面</th><th>失败登录</th><th>未认证请求</th><th>最近路径</th><th>状态</th></tr>';
+      const uaShort = (raw) => {
+        const s = String(raw || '');
+        if (!s) return '未知客户端';
+        const os = /Windows NT/.test(s) ? 'Windows' : /iPhone|iPad/.test(s) ? 'iOS' : /Android/.test(s) ? 'Android' : /Mac OS X|Macintosh/.test(s) ? 'macOS' : /Linux/.test(s) ? 'Linux' : '';
+        const m = s.match(/Edg\/[\d.]+|Chrome\/[\d.]+|Firefox\/[\d.]+|Safari\/[\d.]+|curl\/[\d.]+|python-requests\/[\d.]+|Go-http-client\/[\d.]+/);
+        let b = m ? m[0] : s.slice(0, 28);
+        if (b.length > 34) b = b.slice(0, 34);
+        return os ? os + ' · ' + b : b;
+      };
+      for (const v of vd.list) {
+        const tr = el('tr');
+        const isLocal = v.ip === '127.0.0.1' || v.ip === '::1';
+        const fail = v.failedLogins ? `<span class="tag off">${v.failedLogins}</span>` : '0';
+        const deny = v.denied ? `<span class="tag off">${v.denied}</span>` : '0';
+        const state = v.online ? '<span class="tag on">访问中</span>' : '<span class="tag">离线</span>';
+        tr.innerHTML = `<td>${esc(isLocal ? '本机 · ' + v.ip : v.ip)}</td>
+          <td title="${esc(v.ua || '')}">${esc(uaShort(v.ua))}</td>
+          <td>${fmtOr(v.firstSeenAt)}</td><td>${fmtOr(v.lastSeenAt)}</td>
+          <td>${v.pageViews}</td><td>${fail}</td><td>${deny}</td>
+          <td>${esc(v.lastPath || '—')}</td><td>${state}</td>`;
+        vtbl.appendChild(tr);
+      }
+      if (!vd.list.length) {
+        const tr = el('tr');
+        tr.innerHTML = '<td colspan="9" style="text-align:center;color:var(--dim)">暂未记录到未登录访客</td>';
+        vtbl.appendChild(tr);
+      }
+      vcard.appendChild(vtbl);
+      box.appendChild(vcard);
+    } finally {
+      busy = false;
+    }
+  }
+
+  refreshBtn.onclick = () => refresh();
+  await refresh();
+  S.usageTimer = setInterval(() => {
+    if (S.current !== 'usage') { clearInterval(S.usageTimer); S.usageTimer = null; return; }
+    refresh();
+  }, 10000);
+}
+
 /* ---- 功能模块 ---- */
 async function renderFeatures(c) {
   c.innerHTML = '';
@@ -2070,7 +2226,7 @@ async function renderSettings(c) {
 async function renderAbout(c) {
   c.innerHTML = '';
   let st;
-  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.5.1' }; }
+  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.6.0' }; }
   const card = el('div', 'card');
   card.innerHTML = `<div style="text-align:center;padding:18px 8px">
     <div style="position:relative;width:130px;height:130px;margin:0 auto">
@@ -2079,7 +2235,7 @@ async function renderAbout(c) {
     <h2 style="margin-top:18px;letter-spacing:5px;color:var(--primary)">TENSAINT<span style="color:var(--text)">73</span>OS</h2>
     <div style="font-size:9px;color:var(--dim);letter-spacing:3px;margin-top:7px">圣钥协议 · SANCTUM KEY PROTOCOL</div>
     <div class="mono-list" style="text-align:left;margin-top:24px;line-height:2.2">
-      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.5.1')}</span></div>
+      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.6.0')}</span></div>
       <div><span class="k">数据库加密</span><span class="v">AES-256-GCM · 管理员库 / 会员库双轨</span></div>
       <div><span class="k">权限模型</span><span class="v">管理员全局 · 会员仅见自己的文件与数据表</span></div>
       <div><span class="k">文件隔离</span><span class="v">每个账号独立虚拟根目录, 接口层强制隔离</span></div>
@@ -2519,7 +2675,7 @@ async function renderAdminAccount(c) {
     <div class="node-tag">${esc(S.nodeId || 'TS73-······')}</div>
     <div style="margin-top:18px">
       <div class="identity-row"><span>角色</span><b>ROOT ADMINISTRATOR</b></div>
-      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.5.1')}</b></div>
+      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.6.0')}</b></div>
       <div class="identity-row"><span>全局数据库</span><b>${st.locked ? '加密锁定' : '已解锁 · AES-256-GCM'}</b></div>
       <div class="identity-row"><span>会话策略</span><b>12h 滑动过期</b></div>
     </div>`;

@@ -1,4 +1,4 @@
-TenSaint73OS · The Saint Key Protocol · v1.5.1
+TenSaint73OS · The Saint Key Protocol · v1.6.0
 ============================================================
 
 A zero-dependency, fully local encrypted private space:
@@ -10,8 +10,9 @@ A zero-dependency, fully local encrypted private space:
     under Network Matrix -> Tunnel Control.
 
 Platform launch commands are listed in the package's Start Here file:
-Windows uses TenSaint73OS-Launcher.exe; Linux, Android (Termux) and
-iPhone/iPad (iSH) use the matching launcher script.
+Windows uses TenSaint73OS-Launcher.exe; Linux and macOS use their bundled
+runtime with the matching launcher script; Android (Termux) and iPhone/iPad
+(iSH) use the matching launcher script.
 
 
 1. Roles and permissions
@@ -34,6 +35,23 @@ iPhone/iPad (iSH) use the matching launcher script.
   database and every private file; this cannot be undone.
 - Members can change their own password, bind a security phone number, and
   permanently delete their own account.
+- The administrator can see how many accounts exist and how many are in use:
+  account name, role, creation source, registration time, last login, last
+  seen, login count, active terminals and state. Every signed-in page sends a
+  heartbeat every 20 seconds; any authenticated request counts too. A user is
+  online when a session made a request within the last 90 seconds, and a valid
+  idle session is still counted as logged in, so no account is missed. The list
+  is complete: every account appears row by row, with no pagination. This view
+  reads account metadata from data/auth.json only. Member databases, files,
+  table names, row counts and contents are never read or returned.
+- The same view also counts people who open the platform without signing in:
+  visitor IP + User-Agent, first/last visit, page views, failed logins and
+  protected-API requests rejected with 401. The login page heartbeats every
+  20 seconds, so an open-but-not-signed-in page is visible too. Visitors are
+  kept for 30 days, and a browser is removed from this list as soon as it
+  authenticates. Only network and activity metadata is stored; credentials,
+  form contents and member data are never recorded. Any data API without a
+  valid session still returns 401 and is counted.
 
 
 2. Supreme administrator (instance owner only)
@@ -46,11 +64,11 @@ To establish the supreme administrator on a device:
   1) Fully exit TenSaint73OS.
   2) Register the owner fingerprint once from the key you trust:
        Windows: owner\Fingerprint-Owner-Key.bat "C:\path\to\your.tsowner"
-       Linux / Termux / iSH: sh owner/fingerprint-owner-key.sh "/path/to/your.tsowner"
+       Linux / macOS / Termux / iSH: sh owner/fingerprint-owner-key.sh "/path/to/your.tsowner"
      This writes owner/OWNER.pin. While it is absent or empty, every import is
      refused. The pin contains only a fingerprint, never a password or phone.
   3) Run owner/import-owner-key (Windows .bat, or sh
-     owner/import-owner-key.sh on Linux / Termux / iSH).
+     owner/import-owner-key.sh on Linux / macOS / Termux / iSH).
   4) Supply the .tsowner path and its passphrase. The key is accepted only when
      its fingerprint matches owner/OWNER.pin, so a self-made key cannot be
      imported. The identity is written into this installation's encrypted auth
@@ -161,16 +179,24 @@ nothing is synchronized automatically.
 - The tunnel mechanism is unchanged: cloudflared still allocates a fresh
   Cloudflare Quick Tunnel hostname, and the platform publishes whatever URL the
   current process obtained.
-- The current build compares itself with the newest published GitHub release
-  (one request to the public releases API, cached for an hour, silent when
-  offline). When that release is newer and this machine still holds a previous
-  deployment (a remembered account or existing data: system database, member
-  databases, member workspaces, tunnel record), the update notice appears on
-  every page open. A current build is never asked to update itself. Closing it
-  hides it for that session only; the next open shows it again, and no browser
-  marker can silence it permanently. A brand-new install with no data and no
-  remembered account is not interrupted. The official release page is
+- The current build compares itself with the newest published release on both
+  GitHub and GitCode (one request per source, cached for an hour, silent when
+  offline, the higher tag wins). When that release is newer and this machine
+  still holds a previous deployment (a remembered account or existing data:
+  system database, member databases, member workspaces, tunnel record), the
+  update notice appears on every page open. A current build is never asked to
+  update itself. Closing it hides it for that session only; the next open shows
+  it again, and no browser marker can silence it permanently. A brand-new
+  install with no data and no remembered account is not interrupted. Release
+  pages:
   https://github.com/IAMMEZSH/TenSaint73OS/releases/latest
+  https://gitcode.com/gcw_So3EkhfR/TenSaint73OS
+- Old-version users are reminded in the only channel this project has: the
+  login page of the instance they already use. v1.5.1 and newer show the notice
+  before login, for owners and members alike, as soon as a newer release is
+  published. There is no email list, phone list or push service, and an instance
+  that is never opened again cannot be reached; owners should also read the
+  release notes on both platforms.
 
 
 8. Reminders

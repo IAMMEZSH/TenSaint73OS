@@ -1,6 +1,6 @@
 TenSaint73OS · Android / Termux Deployment Guide
 ================================================
-This guide covers Android + Termux only. For Windows, Linux and iPhone/iPad
+This guide covers Android + Termux only. For Windows, Linux, macOS and iPhone/iPad
 see the package's Start Here document.
 This package is not an APK. On Android, Termux runs Node and Chrome opens the
 console. The public package contains no administrator account, real database or

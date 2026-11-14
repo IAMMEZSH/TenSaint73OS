@@ -57,7 +57,7 @@ iOS version):
   and switch to Safari. Return to iSH and press Ctrl+C to stop the keep-alive.
   Keep iSH in the foreground for active use.
 
-Other platforms (Android / Linux / Windows) are outside this guide; see the
+Other platforms (Android / Linux / Windows / macOS) are outside this guide; see the
 package's Start Here document.
 
 B. Hosted on a computer (most stable; recommended for long-term use)

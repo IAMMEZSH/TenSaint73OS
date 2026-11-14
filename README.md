@@ -5,13 +5,13 @@
 <h1 align="center">TenSaint73OS</h1>
 
 <p align="center"><strong>THE SAINT KEY PROTOCOL</strong><br>
-A local-first, zero-dependency, encrypted multi-user workspace that runs on Windows, Linux, Android and iPhone/iPad.</p>
+A local-first, zero-dependency, encrypted multi-user workspace that runs on Windows, Linux, macOS, Android and iPhone/iPad.</p>
 
 <p align="center">
   <code>AES-256-GCM</code> · <code>scrypt</code> · <code>PER-USER VAULTS</code> · <code>PHONE 2FA</code> · <code>OWNER KEY</code> · <code>OPTIONAL CLOUDFLARE TUNNEL</code>
 </p>
 
-<p align="center"><strong>Version 1.5.1</strong> · Node.js 18+ · no npm runtime dependencies · no telemetry · no cloud account</p>
+<p align="center"><strong>Version 1.6.0</strong> · Node.js 18+ · no npm runtime dependencies · no telemetry · no cloud account</p>
 
 > **Public builds are member-only on first launch.**
 > They contain **no admin account, no real database and no keys**.
@@ -30,7 +30,7 @@ A local-first, zero-dependency, encrypted multi-user workspace that runs on Wind
 3. [Feature overview](#3-feature-overview)
 4. [Screenshots](#4-screenshots)
 5. [Security architecture](#5-security-architecture)
-6. [Four platforms, one core](#6-four-platforms-one-core)
+6. [Five platforms, one core](#6-five-platforms-one-core)
 7. [Quick start](#7-quick-start)
 8. [Operating limits reference](#8-operating-limits-reference)
 9. [Public tunnel](#9-public-tunnel)
@@ -56,9 +56,10 @@ server binds to loopback only. Data is encrypted before it is written to disk.
 The owner has a supreme administrator identity; everybody else is a member with
 an isolated encrypted database and an isolated encrypted file workspace.
 
-It is built for four situations in particular:
+It is built for five situations in particular:
 
 - A private workspace on a personal Windows PC or Linux machine.
+- A native desktop node on a Mac (Apple silicon or Intel).
 - A pocket server on Android through Termux.
 - An iPhone/iPad demo or secondary node through iSH.
 - A temporary, globally reachable endpoint created with an outbound Cloudflare
@@ -96,8 +97,8 @@ without a Mac, Xcode and an Apple signing identity is not telling the truth.
 
 What *is* real:
 
-- One codebase, four documented launch paths.
-- A self-contained runtime for Windows and Linux (Node.js 24.18.0 bundled).
+- One codebase, five documented launch paths.
+- A self-contained runtime for Windows, Linux and macOS (Node.js 24.18.0 bundled).
 - A browser console that works on desktop and mobile widths.
 - Encrypted storage that survives restarts and can be backed up.
 - An owner identity that can be restored on another machine without shipping
@@ -122,6 +123,29 @@ What *is* real:
 - Security phone as a second factor: once bound, login requires **password +
   phone number**.
 - Admin can disable new registrations at runtime.
+- **Account usage visibility.** The administrator sees how many accounts exist
+  and how many are actually in use: account name, role, creation source,
+  registration time, last login, last seen, login count, active terminals and
+  current state. Online detection is heartbeat-based and exhaustive: every
+  signed-in page sends a heartbeat every 20 seconds, every authenticated API
+  request also counts, and a user is online when any of their sessions made a
+  request within the last 90 seconds. A valid but idle session is still shown
+  as **logged in**, so no account is hidden. Every account is listed row by row
+  with no pagination and no sampling. Statistics are built from account-level
+  metadata only. Private files, table names, row counts and contents are never
+  read, counted or returned.
+- **Unauthenticated visitor visibility.** The same report lists people who reach
+  the login page without signing in, plus failed login attempts and requests to
+  protected APIs made without a valid session. Visitors are grouped by client IP
+  and User-Agent, kept for 30 days, and shown in full with first/last seen,
+  page views, failed logins, unauthenticated requests and last path. The login
+  page sends a heartbeat every 20 seconds, so an open-but-not-signed-in page is
+  visible too. Once a browser authenticates, its visitor record is removed, so
+  the list contains only clients that have not signed in. Unauthenticated
+  visitors can never read platform data: every data API returns `401` without a
+  valid session, and those rejections are counted.
+  Only network and activity metadata is stored — never credentials or input
+  content.
 - Session tokens are random, expire after 12 hours of inactivity, and are
   revoked when a password changes or an account is deleted.
 - **Private spaces are closed to the administrator as well.** The admin API
@@ -165,7 +189,8 @@ What *is* real:
 ### Console
 
 - Real-time system core page, member dashboard, database browser, file manager,
-  user management, audit log, network matrix, URL board and tunnel control.
+  user management, user statistics, audit log, network matrix, URL board and
+  tunnel control.
 - Admin console and member console are separate experiences.
 - Mobile navigation layout for narrow screens.
 - Current UI language: **Simplified Chinese** (the code and API are English).
@@ -197,24 +222,27 @@ What *is* real:
 
 <table>
   <tr>
-    <td width="50%"><img src="screenshots/login.png?v=1.5.1" alt="Login"><br><sub><b>Login</b> — password plus optional bound-phone second factor.</sub></td>
-    <td width="50%"><img src="screenshots/admin-console.png?v=1.5.1" alt="Admin console"><br><sub><b>Admin console</b> — encrypted system database unlocked, live telemetry.</sub></td>
+    <td width="50%"><img src="screenshots/login.png?v=1.6.0" alt="Login"><br><sub><b>Login</b> — password plus optional bound-phone second factor.</sub></td>
+    <td width="50%"><img src="screenshots/admin-console.png?v=1.6.0" alt="Admin console"><br><sub><b>Admin console</b> — encrypted system database unlocked, live telemetry.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/database.png?v=1.5.1" alt="Global database browser"><br><sub><b>Global database</b> — the sole administrator browses the unlocked system store.</sub></td>
-    <td><img src="screenshots/grants.png?v=1.5.1" alt="Per-member grant dialog"><br><sub><b>Grant dialog</b> — per-table and per-directory read / read-write levels.</sub></td>
+    <td><img src="screenshots/database.png?v=1.6.0" alt="Global database browser"><br><sub><b>Global database</b> — the sole administrator browses the unlocked system store.</sub></td>
+    <td><img src="screenshots/grants.png?v=1.6.0" alt="Per-member grant dialog"><br><sub><b>Grant dialog</b> — per-table and per-directory read / read-write levels.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/shared-space.png?v=1.5.1" alt="Member shared space"><br><sub><b>Shared space</b> — a member sees only the granted tables and directories.</sub></td>
-    <td><img src="screenshots/shared-table.png?v=1.5.1" alt="Shared table opened read-write"><br><sub><b>Shared table</b> — row insert/edit/delete inside an <code>rw</code> grant; no DDL.</sub></td>
+    <td><img src="screenshots/shared-space.png?v=1.6.0" alt="Member shared space"><br><sub><b>Shared space</b> — a member sees only the granted tables and directories.</sub></td>
+    <td><img src="screenshots/shared-table.png?v=1.6.0" alt="Shared table opened read-write"><br><sub><b>Shared table</b> — row insert/edit/delete inside an <code>rw</code> grant; no DDL.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/shared-files.png?v=1.5.1" alt="Shared directory opened read-write"><br><sub><b>Shared directory</b> — upload, mkdir, download and delete inside the granted subtree.</sub></td>
-    <td><img src="screenshots/member-space.png?v=1.5.1" alt="Member space"><br><sub><b>Member space</b> — isolated per-user vault and workspace.</sub></td>
+    <td><img src="screenshots/shared-files.png?v=1.6.0" alt="Shared directory opened read-write"><br><sub><b>Shared directory</b> — upload, mkdir, download and delete inside the granted subtree.</sub></td>
+    <td><img src="screenshots/member-space.png?v=1.6.0" alt="Member space"><br><sub><b>Member space</b> — isolated per-user vault and workspace.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/member-account.png?v=1.5.1" alt="Account security"><br><sub><b>Account security</b> — role summary, password rotation and phone-binding second factor.</sub></td>
-    <td><img src="screenshots/tunnel.png?v=1.5.1" alt="Tunnel control"><br><sub><b>Tunnel control</b> — administrator-only Cloudflare tunnel opened from the console; the public URL is issued on demand.</sub></td>
+    <td><img src="screenshots/member-account.png?v=1.6.0" alt="Account security"><br><sub><b>Account security</b> — role summary, password rotation and phone-binding second factor.</sub></td>
+    <td><img src="screenshots/tunnel.png?v=1.6.0" alt="Tunnel control"><br><sub><b>Tunnel control</b> — administrator-only Cloudflare tunnel opened from the console; the public URL is issued on demand.</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="screenshots/usage.png?v=1.6.0" alt="User statistics"><br><sub><b>User statistics</b> — registered accounts, signed-in and unauthenticated visitors, online now, 24-hour and 7-day activity, failed logins and rejected requests. Account and network metadata only; member files and tables never enter this view.</sub></td>
   </tr>
 </table>
 
@@ -226,7 +254,7 @@ The request path, the trust boundary and the two inbound rules are drawn once,
 in the figure below; the sections that follow add the details.
 
 <div align="center">
-  <img src="docs/architecture.svg?v=1.5.1" alt="Request path, trust boundary, ports and data directories" width="100%">
+  <img src="docs/architecture.svg?v=1.6.0" alt="Request path, trust boundary, ports and data directories" width="100%">
 </div>
 
 ### 5.1 Trust boundary
@@ -246,7 +274,7 @@ There are only two network paths into the console:
 
 | Asset | Cipher / KDF | Key source | Notes |
 |---|---|---|---|
-| Auth vault (`auth.json`) | AES-256-GCM | `SHA-256("TenSaint73OS::" + install.salt)` | Entire user table is one encrypted envelope. |
+| Auth vault (`auth.json`) | AES-256-GCM | `SHA-256("TenSaint73OS::" + install.salt)` | Entire account table and visitor records are one encrypted envelope. |
 | Login password | scrypt (N=16384, r=8, p=1, 64-byte output) | Random 16-byte salt per user | Only the hash is stored. |
 | Phone number | AES-256-GCM | `HMAC-SHA256(installKey, "TenSaint73OS::phone-vault::v1")` | Domain-separated from the vault key. A scrypt hash is also stored for login verification. |
 | System database (`system.db`) | AES-256-GCM envelope + scrypt KDF | Admin password + random salt | Locked until an administrator logs in. |
@@ -306,7 +334,7 @@ security key. Anyone who controls both the password and the bound SIM can log in
 ### 5.5 Per-user isolation
 
 <div align="center">
-  <img src="docs/isolation.svg?v=1.5.1" alt="Per-member isolation, the admin's 403 endpoints, path resolution and deletion" width="100%">
+  <img src="docs/isolation.svg?v=1.6.0" alt="Per-member isolation, the admin's 403 endpoints, path resolution and deletion" width="100%">
 </div>
 
 Each member gets:
@@ -345,7 +373,7 @@ software only on hardware you trust.
 ### 5.6 Data grants and the shared view
 
 <div align="center">
-  <img src="docs/grants.svg?v=1.5.1" alt="Grant model, member view, live revocation and the shared endpoint status table" width="100%">
+  <img src="docs/grants.svg?v=1.6.0" alt="Grant model, member view, live revocation and the shared endpoint status table" width="100%">
 </div>
 
 Isolation (§5.5) answers “who can see this member's data”. Grants answer the
@@ -412,8 +440,19 @@ states and must not be displayed as the same thing.
 - Tokens are 24 random bytes, hexadecimal encoded.
 - Sessions expire after an idle window that slides forward on every request; the
   exact lifetime is listed in §8.
+- Every signed-in page sends a heartbeat every 20 seconds (and immediately when
+  the tab becomes visible). A session is **online** when its last authenticated
+  request is at most 90 seconds old; a valid session with no recent request is
+  **logged in** but idle. The report counts both, so no active account is
+  missed. The login page sends a separate unauthenticated heartbeat so
+  open-but-not-signed-in visitors are not invisible.
 - Login failures are counted per client IP; the threshold and lock duration are
-  listed in §8.
+  listed in §8. Failed attempts and unauthenticated calls to protected APIs also
+  update the visitor record for that IP + User-Agent, without storing what was
+  typed.
+- Unauthenticated visitors are grouped by IP + User-Agent, retained for 30 days,
+  and pruned automatically; no cookie is required and nothing is shared with any
+  third party.
 - Password changes, phone changes and deletions revoke the affected sessions.
 - When the server is behind the tunnel, client IPs are taken from
   `X-Forwarded-For` only because the origin socket is loopback and the proxy is
@@ -446,7 +485,7 @@ Be explicit about the limits:
 ### 5.10 Owner key (`.tsowner`)
 
 <div align="center">
-  <img src="docs/owner-key.svg?v=1.5.1" alt="Owner-key export, the .tsowner envelope, import rules and the identity-versus-data boundary" width="100%">
+  <img src="docs/owner-key.svg?v=1.6.0" alt="Owner-key export, the .tsowner envelope, import rules and the identity-versus-data boundary" width="100%">
 </div>
 
 The owner key solves a specific problem: the public package cannot contain admin
@@ -474,25 +513,25 @@ passphrase never are.
 
 ---
 
-## 6. Four platforms, one core
+## 6. Five platforms, one core
 
 <div align="center">
-  <img src="docs/platforms.svg?v=1.5.1" alt="Windows, Linux, Termux and iSH command cards with the exact launcher commands" width="100%">
+  <img src="docs/platforms.svg?v=1.6.0" alt="Windows, Linux, macOS, Termux and iSH command cards with the exact launcher commands" width="100%">
 </div>
 
-| | Windows | Linux | Android | iPhone / iPad |
-|---|---|---|---|---|
-| Package | `TenSaint73OS-Windows-x64.zip` | `TenSaint73OS-Linux-x64-arm64.zip` | `TenSaint73OS-Android-Termux.zip` | `TenSaint73OS-iPhone-iSH.zip` |
-| Runtime | Node.js 24.18.0 **bundled** | Node.js 24.18.0 **bundled** (x64 + arm64) | Node.js installed by Termux | Node.js installed by iSH/Alpine |
-| Launcher | `TenSaint73OS-Launcher.exe` | `启动-TenSaint73OS-Linux.sh` | `启动-TenSaint73OS-Android.sh` | `启动-TenSaint73OS-iPhone.sh` |
-| UI | Default browser → `127.0.0.1:7373` | Browser | Chrome | Safari |
-| Native app? | Desktop executable | Shell + browser | Not an APK | Not an IPA |
-| Tunnel host | Recommended | Recommended | Good (keep awake) | Not recommended |
-| Data location | `TenSaint73OS\data` | `TenSaint73OS/data` | `~/TenSaint73OS/data` | `~/TenSaint73OS/data` |
+| | Windows | Linux | macOS | Android | iPhone / iPad |
+|---|---|---|---|---|---|
+| Package | `TenSaint73OS-Windows-x64.zip` | `TenSaint73OS-Linux-x64-arm64.zip` | `TenSaint73OS-macOS.zip` | `TenSaint73OS-Android-Termux.zip` | `TenSaint73OS-iPhone-iSH.zip` |
+| Runtime | Node.js 24.18.0 **bundled** | Node.js 24.18.0 **bundled** (x64 + arm64) | Node.js 24.18.0 **bundled** (arm64 + x64) | Node.js installed by Termux | Node.js installed by iSH/Alpine |
+| Launcher | `TenSaint73OS-Launcher.exe` | `启动-TenSaint73OS-Linux.sh` | `启动-TenSaint73OS-macOS.command` | `启动-TenSaint73OS-Android.sh` | `启动-TenSaint73OS-iPhone.sh` |
+| UI | Default browser → `127.0.0.1:7373` | Browser | Safari or Chrome | Chrome | Safari |
+| Native app? | Desktop executable | Shell + browser | `.command` + browser | Not an APK | Not an IPA |
+| Tunnel host | Recommended | Recommended | Recommended | Good (keep awake) | Not recommended |
+| Data location | `TenSaint73OS\data` | `TenSaint73OS/data` | `TenSaint73OS/data` | `~/TenSaint73OS/data` | `~/TenSaint73OS/data` |
 
 The **viewer can be any device**: once a tunnel is running, a Windows PC, Mac,
 Linux laptop, Android phone, iPhone or iPad with internet can open the HTTPS
-address. The four packages describe where the *server* runs, not who may connect.
+address. The five packages describe where the *server* runs, not who may connect.
 
 ### 6.1 Windows 10 / 11 (x64)
 
@@ -527,7 +566,28 @@ Optional application-menu entry:
 ./安装-Linux桌面图标.sh
 ```
 
-### 6.3 Android (Termux)
+### 6.3 macOS (Apple silicon / Intel)
+
+```bash
+unzip TenSaint73OS-macOS.zip
+cd TenSaint73OS-macOS
+chmod +x *.command *.sh
+./启动-TenSaint73OS-macOS.command
+```
+
+You can also double-click `启动-TenSaint73OS-macOS.command` in Finder. The
+first launch may be blocked by Gatekeeper because the archive is not signed by
+an Apple Developer ID: right-click the file, choose **Open**, and confirm once.
+The launcher picks `runtime/node-macos-arm64` or `runtime/node-macos-x64`
+according to `uname -m`, opens `http://127.0.0.1:7373`, and keeps the server in
+the Terminal window. If an older macOS cannot run the bundled Node 24, install
+Node.js 18+ (`brew install node`) and the launcher falls back to `node` from
+`PATH`.
+
+The macOS package is a launch script plus the same server and web console; it is
+not a signed `.app` bundle and not distributed through the App Store.
+
+### 6.4 Android (Termux)
 
 This is a Termux application, not an APK.
 
@@ -557,7 +617,7 @@ For the in-console tunnel on Termux, use the console's **Install tunnel
 component** (安装隧道组件) button.
 `pkg install -y cloudflared` remains a manual fallback.
 
-### 6.4 iPhone / iPad (iSH)
+### 6.5 iPhone / iPad (iSH)
 
 This is not an IPA. It runs inside **iSH**, the x86 Alpine emulator from the App
 Store.
@@ -583,15 +643,19 @@ pauses. Keep iSH in the foreground for active use; an optional keep-alive script
 guaranteed. Because of this, **iSH is a demo/secondary node, not the recommended
 always-on tunnel host**.
 
-### 6.5 Why no native APK or IPA?
+### 6.6 Why no native APK, IPA or `.app`?
 
 - A real IPA requires macOS, Xcode and an Apple signing identity. Cross-compiling
   a Node.js server + WebView into a signed IPA from Windows is not possible with
   this project's constraints.
+- A signed, notarized macOS `.app` requires an Apple Developer ID certificate
+  and a notarization step. The `.command` launcher starts the same server with
+  the bundled Node runtime and avoids that distribution chain; macOS can also
+  run the source directly with `node server.js`.
 - A native Android app would add a large toolchain and an APK signing pipeline,
   while Termux already provides a complete Linux userland with Node.js.
 - The web console is the same on every platform, so there is one UI to secure
-  and maintain instead of four native codebases.
+  and maintain instead of five native codebases.
 
 ---
 
@@ -765,7 +829,7 @@ files, so these values do not constrain a member's own space.
 - Connection close — a body above 50 MB is refused before routing, so nothing is
   written to disk.
 
-These are the defaults for v1.5.1. The constants live in `core/auth.js`
+These are the defaults for v1.6.0. The constants live in `core/auth.js`
 (`SESSION_TTL`), `core/userstore.js` (`MAX_*`), `core/store.js` (log and URL
 caps) and `server.js` (body cap and rate limit).
 
@@ -804,7 +868,7 @@ back into the history. Stopping the tunnel from the console does the same, and a
 tunnel that has gone offline is never re-added automatically.
 
 <div align="center">
-  <img src="docs/tunnel-flow.svg?v=1.5.1" alt="Outbound tunnel sequence, the publishing path, run-online.sh and the named-tunnel alternative" width="100%">
+  <img src="docs/tunnel-flow.svg?v=1.6.0" alt="Outbound tunnel sequence, the publishing path, run-online.sh and the named-tunnel alternative" width="100%">
 </div>
 
 ### 9.2 The fine print
@@ -820,7 +884,7 @@ tunnel that has gone offline is never re-added automatically.
   disable it in the admin settings before sharing the URL broadly.
 - **TLS terminates at Cloudflare.** Data on disk is encrypted, but Cloudflare can
   observe traffic at its edge. Do not treat this as end-to-end encryption.
-- **Host recommendations:** Windows, Linux or a charged Android/Termux device
+- **Host recommendations:** Windows, Linux, macOS or a charged Android/Termux device
   with battery optimization disabled. iPhone/iSH is not a reliable tunnel host.
 - **Stop the tunnel when done.** The console's stop button ends the child process
   and the URL immediately.
@@ -828,19 +892,21 @@ tunnel that has gone offline is never re-added automatically.
 ### 9.3 Update notice and data continuity
 
 The login page asks `GET /api/update` after the boot animation. The server
-compares its own `VERSION` with the newest published GitHub release — one HTTPS
-request to the public releases API, cached for an hour, six-second timeout, no
-account data, and a silent failure when offline. Only when the official release
-is newer does the notice appear, and only while this machine still holds a
-previous deployment: a remembered account (`ts73_last_user`), or `data_present:
-true` from the server (an existing `system.db`, per-member databases, member
-workspaces, or a recorded tunnel URL). A current build is therefore never asked
-to update itself. Closing the notice hides it for that session only; the next
-open shows it again. Nothing is written to `localStorage` as an acknowledgement,
-so no browser state can permanently silence it. A brand-new install with no data
-and no remembered account is not interrupted at all. The notice links to
-<https://github.com/IAMMEZSH/TenSaint73OS/releases/latest> and states the
-continuity guarantee:
+compares its own `VERSION` with the newest published release on **GitHub and
+GitCode**: both public APIs are queried in parallel, each cached for an hour,
+with a six-second timeout, no account data and a silent failure when offline.
+The higher of the two tags is used, so a lagging mirror cannot hide an update.
+Only when the published release is newer does the notice appear, and only while
+this machine still holds a previous deployment: a remembered account
+(`ts73_last_user`), or `data_present: true` from the server (an existing
+`system.db`, per-member databases, member workspaces, or a recorded tunnel URL).
+A current build is therefore never asked to update itself. Closing the notice
+hides it for that session only; the next open shows it again. Nothing is written
+to `localStorage` as an acknowledgement, so no browser state can permanently
+silence it. A brand-new install with no data and no remembered account is not
+interrupted at all. The notice links to
+<https://github.com/IAMMEZSH/TenSaint73OS/releases/latest>, or to the GitCode
+release page when only that source answered. The continuity guarantee is:
 
 - Application files may be replaced; `data/` (auth vault, system database,
   per-member databases and encrypted workspaces) is untouched. Extract the new
@@ -858,10 +924,28 @@ continuity guarantee:
   and workspaces keep their existing encryption and remain readable.
 - Dismissing the notice changes nothing on disk and stores no browser marker;
   the next open shows it again while the old deployment is still present.
-- A copy that predates this notice has no update channel and cannot be modified
-  from the outside; it never contacts this repository on its own. Opening a
-  current build in the same directory is the update step, and the old data is
-  read as-is.
+
+**Reminding every user of an old version.** The project has no email list, phone
+list or push service, so nobody can be contacted outside the software itself.
+What every old installation *can* do is remind whoever opens it:
+
+- v1.5.1 and v1.6.0 already contain this in-app notice. Once v1.6.0 is the
+  newest GitHub release, an old v1.5.1 instance that still holds data shows the
+  upgrade notice on its login page at the next page open. That covers every
+  member and the owner of that instance, because the notice is rendered before
+  login and is not tied to a role.
+- Members normally reconnect through a fresh browser session after the owner
+  restarts or upgrades the instance; the notice is visible on that login screen.
+  An instance that is never opened again cannot be reached by any channel; this
+  limitation is stated here instead of being hidden.
+- Release notes on both platforms carry the same upgrade instructions, and the
+  v1.6.0 update check also queries GitCode so installations that cannot reach
+  GitHub still receive future notices.
+
+A copy older than the notice feature has no update channel and cannot be
+modified from the outside; it never contacts either repository on its own.
+Opening a current build in the same directory is the update step, and the old
+data is read as-is.
 
 The version shown in the sidebar and the cache-busting query on `app.js` and
 `style.css` use the server version, so a stale browser cache does not silently
@@ -963,7 +1047,7 @@ Do not expose port 7373 directly. Plain HTTP would send passwords in the clear.
 ### 11.1 Data layout
 
 <div align="center">
-  <img src="docs/data-layout.svg?v=1.5.1" alt="The data directory tree, plaintext versus sealed files, restore-as-one-set, backup commands and update survival" width="100%">
+  <img src="docs/data-layout.svg?v=1.6.0" alt="The data directory tree, plaintext versus sealed files, restore-as-one-set, backup commands and update survival" width="100%">
 </div>
 
 ```text
@@ -1110,14 +1194,16 @@ Content-Type: application/json
 | `POST` | `/api/register` | Create a member account. Always role `user`. |
 | `POST` | `/api/login` | Password + optional bound phone. Returns a token. |
 | `POST` | `/api/logout` | Destroy the bearer token. |
-| `GET` | `/api/update` | Running version, the newest official release tag, `update_available` (true only when that tag is newer), official site and releases URL, `data_present` (whether this installation already holds encrypted data), data-continuity flags. No account data. |
+| `GET` | `/api/update` | Running version; newest published tag on GitHub and GitCode (`latest_github`, `latest_gitcode`, `latest_version`), `update_available` (true only when the higher tag is newer), GitHub release page, GitCode repository URL, `data_present` (whether this installation already holds encrypted data), data-continuity flags. No account data. |
 | `GET` | `/api/access` | Running version and the already-generated tunnel URL (empty until one exists). No account data. |
+| `GET` | `/api/visit` | Unauthenticated login-page heartbeat. Refreshes the visitor record (IP + User-Agent) so open-but-not-signed-in visitors are counted. Returns only the server time. |
 
 ### 13.2 Member endpoints
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/my` | Own profile and space summary. |
+| `GET` | `/api/ping` | Session heartbeat for administrators and members; refreshes the online timestamp and returns the server time. |
 | `POST` | `/api/me/password` | Change own password; revokes other sessions. |
 | `GET` | `/api/me/phone` | Read own decrypted phone (self only). |
 | `POST` | `/api/me/phone` | Bind or replace phone. |
@@ -1180,6 +1266,7 @@ reset their password.
 |---|---|
 | Overview | `GET /api/overview` |
 | Users | `GET /api/users`, `POST /api/users/create` (members only; `role: "admin"` returns `400`), `POST /api/users/delete`, `GET /api/users/space` (self only), `POST /api/users/password` (self only), `GET /api/grants?username=`, `POST /api/grants/set` |
+| Usage | `GET /api/usage` — account count, online and active members, last login, last seen and login count, plus unauthenticated visitors, failed logins and rejected protected-API requests; account and network metadata only |
 | Features | `GET /api/features`, `POST /api/features/toggle`, `POST /api/features/add`, `POST /api/features/remove` |
 | Theme | `POST /api/theme/set`, `POST /api/theme/reset` |
 | Logs | `GET /api/logs`, `POST /api/logs/clear` |
@@ -1189,6 +1276,32 @@ reset their password.
 | Settings | `POST /api/settings/port`, `POST /api/settings/registration` |
 | System | `POST /api/system/restart`, `POST /api/system/lock`, `POST /api/key/rotate` |
 | Tools | `GET /api/tools/random`, `POST /api/tools/hash`, `POST /api/ai` |
+
+`/api/usage` summarizes **accounts, visitors and network activity, not data**.
+For each account it returns the account name, role, creation source,
+registration time, last login time, last seen time, login count, valid session
+count, online flag and logged-in flag. For unauthenticated traffic it returns
+each IP + User-Agent visitor with first and last seen time, page views, failed
+logins, authenticated-API rejections and the last requested path. A browser is
+removed from this list as soon as it authenticates. It never opens
+a member database or workspace, never counts rows, never lists table names and
+never returns file names or contents. A member calling it receives `403` like
+any other administrator route.
+
+`GET /api/ping` is the heartbeat used by the console. Every signed-in page calls
+it every 20 seconds and immediately when the tab becomes visible again; any
+other authenticated request refreshes the same timestamp. A session counts as
+online while its last request is no more than 90 seconds old, a window chosen to
+survive background-tab timer throttling. The report therefore covers every
+account currently using the platform, including multiple terminals, without
+polling private data.
+
+`GET /api/visit` is the matching heartbeat for the login page. It requires no
+token and only refreshes the visitor record, which makes open-but-not-signed-in
+visitors visible. Visitors are grouped by IP + User-Agent, kept for 30 days, and
+never include credentials, form contents or browsing data. Requests to protected
+APIs without a valid session still receive `401`; each rejection increments the
+visitor's unauthenticated-request counter.
 
 A member calling an administrator path receives `403` with
 `"权限不足: 该内容仅最高权限账号可见"` (“insufficient permission: this content is
@@ -1237,15 +1350,16 @@ binaries must never be.
 
 ### Release packages
 
-The GitHub Releases contain:
+The GitHub and GitCode releases contain the same five archives plus the checksum file:
 
 | File | Approx. size | Contents |
 |---|---|---|
-| `TenSaint73OS-Windows-x64.zip` | ~36 MB | Source + `runtime/node.exe` + GUI launcher |
-| `TenSaint73OS-Linux-x64-arm64.zip` | ~87 MB | Source + Node x64/arm64 + launch scripts |
-| `TenSaint73OS-Android-Termux.zip` | ~2.6 MB | Source + Termux scripts, no runtime |
-| `TenSaint73OS-iPhone-iSH.zip` | ~2.6 MB | Source + iSH scripts, no runtime |
-| `SHA256SUMS.txt` | small | SHA-256 of the four archives |
+| `TenSaint73OS-Windows-x64.zip` | ~41 MB | Source + `runtime/node.exe` + GUI launcher |
+| `TenSaint73OS-Linux-x64-arm64.zip` | ~92 MB | Source + Node x64/arm64 + launch scripts |
+| `TenSaint73OS-macOS.zip` | ~84 MB | Source + Node arm64/x64 + `.command` launcher |
+| `TenSaint73OS-Android-Termux.zip` | ~8 MB | Source + Termux scripts, no runtime |
+| `TenSaint73OS-iPhone-iSH.zip` | ~8 MB | Source + iSH scripts, no runtime |
+| `SHA256SUMS.txt` | small | SHA-256 of the five archives |
 
 Verify a download:
 
@@ -1403,6 +1517,6 @@ with or endorsed by them.
 ---
 
 <div align="center">
-  <sub>TENSAINT73OS · THE SAINT KEY PROTOCOL · V1.5.1</sub><br>
-  <sub>LOCAL-FIRST · ENCRYPTED · ZERO-DEPENDENCY · FOUR PLATFORMS</sub>
+  <sub>TENSAINT73OS · THE SAINT KEY PROTOCOL · V1.6.0</sub><br>
+  <sub>LOCAL-FIRST · ENCRYPTED · ZERO-DEPENDENCY · FIVE PLATFORMS</sub>
 </div>

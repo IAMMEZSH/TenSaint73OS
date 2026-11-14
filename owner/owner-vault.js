@@ -340,6 +340,10 @@ async function doImport() {
     role: 'admin',
     grants: { tables: {}, files: {} },
     createdAt: u.createdAt || new Date().toISOString(),
+    createdBy: 'owner',
+    lastLoginAt: null,
+    lastSeenAt: null,
+    loginCount: 0,
   });
   auth.save();
 

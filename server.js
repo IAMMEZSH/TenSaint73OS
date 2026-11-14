@@ -26,7 +26,7 @@ const USERDATA = path.join(DATA, 'users');
 const USER_FILES = path.join(FILES, 'users');
 const PUBLIC = path.join(ROOT, 'public');
 const SYSTEM_NAME = 'TenSaint73OS';
-const VERSION = '1.5.1';
+const VERSION = '1.6.0';
 // 官方发行页 (更新提示用; 隧道地址仍由 cloudflared 随机生成, 这里不写死任何公网地址)
 const OFFICIAL_URL = 'https://github.com/IAMMEZSH/TenSaint73OS';
 const RELEASES_URL = OFFICIAL_URL + '/releases/latest';
@@ -43,6 +43,7 @@ const TRUST_PROXY = process.env.TS_TRUST_PROXY !== undefined
 function openBrowser(url) {
   try {
     if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore' });
+    else if (process.platform === 'darwin') spawn('open', [url], { stdio: 'ignore' });
     else if (IS_TERMUX) spawn('termux-open-url', [url], { stdio: 'ignore' });
   } catch (e) { /* 设备上没有可用浏览器, 忽略 */ }
 }
@@ -136,6 +137,11 @@ if (!auth.users.some(u => u.role === 'admin')) {
 } else if (auth.users.some(u => u.role !== 'admin' && !u.grants)) {
   console.log('[i] 存在尚未授权的受限账号。它们默认看不到任何数据, 请在 用户管理 → 授权 中逐项勾选。');
 }
+
+// 活跃时间按分钟批量落盘, 避免每个认证请求都重写认证库
+const usageFlushTimer = setInterval(() => auth.flushUsage(), 60 * 1000);
+usageFlushTimer.unref();
+process.on('exit', () => { try { auth.flushUsage(); } catch (e) { /* 退出阶段无法写入时忽略 */ } });
 
 const store = new Store(path.join(DATA, 'system.db'));
 if (!store.existed) {
@@ -325,6 +331,9 @@ function requireAuth(req, res) {
   const token = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '') || (req.headers['x-token'] || '');
   const user = auth.check(token);
   if (!user) { send(res, 401, { error: '未登录或会话已过期' }); return null; }
+  auth.touchSeen(user.username);
+  // 已登录的浏览器不再计入未登录访客, 避免正常用户登录后仍留在访客表
+  auth.clearVisitor(clientIp(req), req.headers['user-agent']);
   return user;
 }
 
@@ -433,22 +442,27 @@ route('POST', '/api/register', async (req, res) => {
 
 route('POST', '/api/login', async (req, res) => {
   const ip = clientIp(req);
-  if (auth.isLocked(ip)) return send(res, 429, { error: '尝试次数过多, 已锁定 60 秒' });
+  const ua = req.headers['user-agent'];
+  const noteFail = () => auth.noteVisitor({ ip, ua, kind: 'failed-login', path: '/api/login' });
+  if (auth.isLocked(ip)) { noteFail(); return send(res, 429, { error: '尝试次数过多, 已锁定 60 秒' }); }
   const { username, password, phone } = await readBody(req);
   const user = auth.verify(String(username || ''), String(password || ''));
-  if (!user) { auth.recordFail(ip); return send(res, 401, { error: '账号、密码或安全手机号不正确' }); }
+  if (!user) { noteFail(); auth.recordFail(ip); return send(res, 401, { error: '账号、密码或安全手机号不正确' }); }
   // 已绑定安全手机号 = 第二因子; 密码正确但手机号缺失/错误同样拒绝
   if (auth.hasPhone(user.username) && !auth.verifyPhone(user.username, phone)) {
+    noteFail();
     auth.recordFail(ip);
     return send(res, 401, { error: '账号、密码或安全手机号不正确' });
   }
   auth.clearFail(ip);
+  auth.clearVisitor(ip, ua);
   // 管理员登录 = 数据库解锁密码
   if (user.role === 'admin' && !store.unlocked) {
     if (!store.unlock(String(password))) return send(res, 500, { error: '数据库解锁失败' });
     store.log('info', `管理员 ${user.username} 登录, 数据库已解锁`);
   }
   if (user.role !== 'admin') ensureUserSpace(user.username);
+  auth.markLogin(user.username);
   const token = auth.createSession(user);
   send(res, 200, { ok: true, token, role: user.role, username: user.username, nodeId: nodeIdOf(user.username) });
 });
@@ -456,7 +470,21 @@ route('POST', '/api/login', async (req, res) => {
 route('POST', '/api/logout', async (req, res) => {
   const token = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
   auth.destroy(token);
+  auth.flushUsage();
   send(res, 200, { ok: true });
+});
+
+// 页面心跳: 登录后每个页面每 20 秒调用一次, 只刷新在线时间。
+// 不受角色路由、功能开关或数据库锁限制 —— 在线检测覆盖每一个正在使用平台的账号。
+route('GET', '/api/ping', async (req, res, user) => {
+  send(res, 200, { ok: true, at: util.now(), username: user.username });
+});
+
+// 登录页心跳: 未登录也能证明页面仍开着, 用于统计"未登录访客"在线。
+// 只更新访问元数据, 不返回任何账号或数据信息。
+route('GET', '/api/visit', async (req, res) => {
+  auth.noteVisitor({ ip: clientIp(req), ua: req.headers['user-agent'], kind: 'ping', path: '/' });
+  send(res, 200, { ok: true, at: util.now() });
 });
 
 route('GET', '/api/state', async (req, res) => {
@@ -503,10 +531,13 @@ function hasExistingData() {
   return false;
 }
 
-// 官方最新版本: 只向发行接口要一个版本号, 不带账号/数据; 拿到比本机新的版本才提示。
+// 官方最新版本: 同时向 GitHub 与 GitCode 要一个版本号, 不带账号/数据。
+// 任一源可达就能提示; 取两个源里更高的版本, 避免某个源滞后导致漏报。
 // 缓存一小时, 失败就沿用上次结果 (没有结果就不提示) —— 离线部署不会被拖慢也不会误报。
 const RELEASE_API = 'https://api.github.com/repos/IAMMEZSH/TenSaint73OS/releases/latest';
-let releaseProbe = { at: 0, version: '' };
+const GITCODE_API = 'https://api.gitcode.com/api/v5/repos/gcw_So3EkhfR/TenSaint73OS/releases';
+const GITCODE_URL = 'https://gitcode.com/gcw_So3EkhfR/TenSaint73OS';
+let releaseProbe = { at: 0, github: '', gitcode: '', version: '' };
 
 function versionOlder(a, b) {
   const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
@@ -517,40 +548,62 @@ function versionOlder(a, b) {
   return false;
 }
 
-function latestOfficialVersion() {
-  if (Date.now() - releaseProbe.at < 3600 * 1000) return Promise.resolve(releaseProbe.version);
-  releaseProbe.at = Date.now();
+function parseVersionTag(v) {
+  const tag = String(v || '').replace(/^v/i, '');
+  return /^\d+\.\d+\.\d+$/.test(tag) ? tag : '';
+}
+
+function fetchText(url, timeoutMs) {
   return new Promise((resolve) => {
-    const req = https.get(RELEASE_API, {
-      headers: { 'User-Agent': 'TenSaint73OS', Accept: 'application/vnd.github+json' },
-      timeout: 6000,
+    const req = https.get(url, {
+      headers: { 'User-Agent': 'TenSaint73OS', Accept: 'application/json' },
+      timeout: timeoutMs,
     }, (resp) => {
-      if (resp.statusCode !== 200) { resp.resume(); return resolve(releaseProbe.version); }
+      if (resp.statusCode !== 200) { resp.resume(); return resolve(''); }
       let body = '';
       resp.setEncoding('utf8');
-      resp.on('data', (c) => { if (body.length < 65536) body += c; });
-      resp.on('end', () => {
-        try {
-          const tag = String(JSON.parse(body).tag_name || '').replace(/^v/i, '');
-          if (/^\d+\.\d+\.\d+$/.test(tag)) releaseProbe.version = tag;
-        } catch (e) { /* 不是 JSON 就当没拿到 */ }
-        resolve(releaseProbe.version);
-      });
-      resp.on('error', () => resolve(releaseProbe.version));
+      resp.on('data', (c) => { if (body.length < 262144) body += c; });
+      resp.on('end', () => resolve(body));
+      resp.on('error', () => resolve(''));
     });
     req.on('timeout', () => req.destroy());
-    req.on('error', () => resolve(releaseProbe.version));
+    req.on('error', () => resolve(''));
   });
 }
 
+const newer = (a, b) => (versionOlder(a, b) ? b : a);
+
+async function latestOfficialVersion() {
+  if (Date.now() - releaseProbe.at < 3600 * 1000) return releaseProbe;
+  releaseProbe.at = Date.now();
+  const [ghBody, gcBody] = await Promise.all([
+    fetchText(RELEASE_API, 6000),
+    fetchText(GITCODE_API, 6000),
+  ]);
+  try {
+    const tag = parseVersionTag(JSON.parse(ghBody).tag_name);
+    if (tag) releaseProbe.github = tag;
+  } catch (e) { /* GitHub 不可达或不是 JSON */ }
+  const gcTags = [...gcBody.matchAll(/"tag_name"\s*:\s*"([^"]+)"/g)]
+    .map((m) => parseVersionTag(m[1])).filter(Boolean);
+  if (gcTags.length) releaseProbe.gitcode = gcTags.reduce(newer, '');
+  const best = [releaseProbe.github, releaseProbe.gitcode].filter(Boolean).reduce(newer, '');
+  if (best) releaseProbe.version = best;
+  return releaseProbe;
+}
+
 route('GET', '/api/update', async (req, res) => {
-  const latest = await latestOfficialVersion();
+  const probe = await latestOfficialVersion();
+  const latest = probe.version;
   send(res, 200, {
     version: VERSION,
     latest_version: latest,
     update_available: !!latest && versionOlder(VERSION, latest),
+    latest_github: probe.github,
+    latest_gitcode: probe.gitcode,
     official_url: OFFICIAL_URL,
-    releases_url: RELEASES_URL,
+    releases_url: probe.github ? RELEASES_URL : GITCODE_URL,
+    gitcode_url: GITCODE_URL,
     data_present: hasExistingData(),
     data_preserved: true,
     auto_reconnect: true,
@@ -763,6 +816,13 @@ route('GET', '/api/fs/download', async (req, res, user) => {
 route('GET', '/api/users', async (req, res, user) => {
   if (!requireFeature(res, 'users')) return;
   send(res, 200, { users: auth.listUsers() });
+});
+
+// ---- 使用统计 ----
+// 只汇总账号与登录活动元数据; 会员私有文件、数据表、表名与内容一律不进入此接口。
+route('GET', '/api/usage', async (req, res, user) => {
+  if (!requireFeature(res, 'usage')) return;
+  send(res, 200, auth.usageReport());
 });
 
 route('POST', '/api/users/create', async (req, res, user) => {
@@ -1585,12 +1645,18 @@ async function handleApi(req, res, pathname) {
   if (!r) return send(res, 404, { error: 'API_NOT_FOUND' });
 
   // 公开路由
-  if (pathname === '/api/login' || pathname === '/api/register' || pathname === '/api/state' || pathname === '/api/theme' || pathname === '/api/logout' || pathname === '/api/update' || pathname === '/api/access') {
+  if (pathname === '/api/login' || pathname === '/api/register' || pathname === '/api/state' || pathname === '/api/theme' || pathname === '/api/logout' || pathname === '/api/update' || pathname === '/api/access' || pathname === '/api/visit') {
     return r.handlers[0](req, res);
   }
 
   const user = requireAuth(req, res);
-  if (!user) return;
+  if (!user) {
+    // 无有效会话访问受保护接口 = 401 并记录来源, 便于管理员发现绕过登录的探测
+    auth.noteVisitor({ ip: clientIp(req), ua: req.headers['user-agent'], kind: 'denied', path: pathname });
+    return;
+  }
+  // 心跳仅证明令牌仍在使用, 跳过角色与数据库锁检查, 保证在线状态一个不漏
+  if (pathname === '/api/ping') return r.handlers[0](req, res, user);
   if (SHARED_ROUTES.has(pathname)) {
     // 共享视图只服务受限用户: 管理员读自己的全局库, 但同样进不了会员私有子树
     if (isAdmin(user)) return send(res, 403, { error: '共享视图面向受限用户; 最高权限账号请直接使用管理面板' });
@@ -1610,6 +1676,9 @@ const server = http.createServer(async (req, res) => {
   const pathname = req.url.split('?')[0];
   try {
     if (pathname.startsWith('/api/')) return await handleApi(req, res, pathname);
+    if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
+      auth.noteVisitor({ ip: clientIp(req), ua: req.headers['user-agent'], kind: 'page', path: '/' });
+    }
     serveStatic(res, pathname);
   } catch (e) {
     send(res, 500, { error: 'INTERNAL_ERROR', detail: e.message });
