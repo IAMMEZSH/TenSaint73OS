@@ -21,6 +21,21 @@ A local-first, zero-dependency, encrypted multi-user workspace that runs on Wind
 > a registered pin every import is refused. See §7.3. Everything else can only
 > register, log in, log out and delete its own account.
 
+## Download
+
+**Windows 10/11 (x64), one click:** [`TenSaint73OS-Windows-x64.zip`](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Windows-x64.zip) — unzip it, then run `TenSaint73OS-Launcher.exe`.
+
+| Platform | Release artifact | GitHub | GitCode |
+|---|---|---|---|
+| Windows 10/11 (x64) | `TenSaint73OS-Windows-x64.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Windows-x64.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Windows-x64.zip) |
+| Linux x86_64 / arm64 | `TenSaint73OS-Linux-x64-arm64.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Linux-x64-arm64.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Linux-x64-arm64.zip) |
+| macOS Apple Silicon / Intel | `TenSaint73OS-macOS.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-macOS.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-macOS.zip) |
+| Android · Termux | `TenSaint73OS-Android-Termux.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Android-Termux.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Android-Termux.zip) |
+| iPhone / iPad · iSH | `TenSaint73OS-iPhone-iSH.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-iPhone-iSH.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-iPhone-iSH.zip) |
+| Checksums | `SHA256SUMS.txt` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/SHA256SUMS.txt) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/SHA256SUMS.txt) |
+
+Both mirrors carry the same six assets with identical names and SHA-256 hashes. The public packages contain no administrator account, no real database and no keys; the owner key is imported separately (see §7.3).
+
 ---
 
 ## Table of contents
