@@ -26,7 +26,7 @@ const USERDATA = path.join(DATA, 'users');
 const USER_FILES = path.join(FILES, 'users');
 const PUBLIC = path.join(ROOT, 'public');
 const SYSTEM_NAME = 'TenSaint73OS';
-const VERSION = '1.7.0';
+const VERSION = '1.7.1';
 // 官方发行页 (更新提示用; 隧道地址仍由 cloudflared 随机生成, 这里不写死任何公网地址)
 const OFFICIAL_URL = 'https://github.com/IAMMEZSH/TenSaint73OS';
 const RELEASES_URL = OFFICIAL_URL + '/releases/latest';
@@ -776,7 +776,7 @@ const CHAT_BANNED_RE = new RegExp('(' + CHAT_BANNED
   .sort((a, b) => b.length - a.length)
   .join('|') + ')', 'gi');
 
-let chatState = { messages: [], nextId: 1, tokenHash: '', tokenCreatedAt: 0 };
+let chatState = { messages: [], nextId: 1, tokenHash: '', tokenCreatedAt: 0, enabled: true };
 try {
   if (fs.existsSync(CHAT_FILE)) {
     const parsed = JSON.parse(unsealBytes(fs.readFileSync(CHAT_FILE)).toString('utf8'));
@@ -1774,6 +1774,7 @@ route('POST', '/api/tools/hash', async (req, res, user) => {
 route('GET', '/api/chat/info', (req, res, user) => {
   send(res, 200, {
     ok: true, room: CHAT_ROOM, relay: true,
+    enabled: chatState.enabled !== false,
     messages: chatState.messages.length,
     tokenConfigured: !!chatState.tokenHash,
     tokenCreatedAt: chatState.tokenCreatedAt || 0,
@@ -1781,11 +1782,15 @@ route('GET', '/api/chat/info', (req, res, user) => {
 });
 
 route('GET', '/api/chat/messages', (req, res, user) => {
+  if (chatState.enabled === false) {
+    return send(res, 200, { ok: true, enabled: false, room: CHAT_ROOM, messages: [], latest: 0 });
+  }
   const q = new URLSearchParams(req.url.split('?')[1] || '');
-  send(res, 200, Object.assign({ ok: true }, chatList(q.get('after'))));
+  send(res, 200, Object.assign({ ok: true, enabled: true }, chatList(q.get('after'))));
 });
 
 route('POST', '/api/chat/messages', async (req, res, user) => {
+  if (chatState.enabled === false) return send(res, 403, { error: '群聊已关闭' });
   if (!chatRateOk('user:' + user.username)) return send(res, 429, { error: '发言太快, 请稍后再试' });
   const body = await readBody(req);
   try {
@@ -1794,6 +1799,15 @@ route('POST', '/api/chat/messages', async (req, res, user) => {
   } catch (e) {
     send(res, 400, { error: e.message });
   }
+});
+
+route('POST', '/api/chat/enabled', async (req, res, user) => {
+  if (!isAdmin(user)) return send(res, 403, { error: '只有最高管理员可以开启或关闭群聊' });
+  const { enabled } = await readBody(req);
+  chatState.enabled = enabled !== false;
+  saveChat();
+  store.log('warn', '群聊已' + (chatState.enabled ? '开启' : '关闭'));
+  send(res, 200, { ok: true, enabled: chatState.enabled });
 });
 
 route('POST', '/api/chat/clear', (req, res, user) => {
@@ -1835,17 +1849,20 @@ route('POST', '/api/chat/token/revoke', (req, res, user) => {
 
 route('GET', '/api/chat/relay/info', (req, res) => {
   if (!chatTokenOk(req)) return sendChat(res, 401, { ok: false, error: '群聊令牌不正确或已被吊销' });
-  sendChat(res, 200, { ok: true, room: CHAT_ROOM, relay: true, messages: chatState.messages.length });
+  if (chatState.enabled === false) return sendChat(res, 403, { ok: false, enabled: false, error: '群聊已关闭' });
+  sendChat(res, 200, { ok: true, enabled: true, room: CHAT_ROOM, relay: true, messages: chatState.messages.length });
 });
 
 route('GET', '/api/chat/relay/messages', (req, res) => {
   if (!chatTokenOk(req)) return sendChat(res, 401, { ok: false, error: '群聊令牌不正确或已被吊销' });
+  if (chatState.enabled === false) return sendChat(res, 403, { ok: false, enabled: false, error: '群聊已关闭' });
   const q = new URLSearchParams(req.url.split('?')[1] || '');
-  sendChat(res, 200, Object.assign({ ok: true }, chatList(q.get('after'))));
+  sendChat(res, 200, Object.assign({ ok: true, enabled: true }, chatList(q.get('after'))));
 });
 
 route('POST', '/api/chat/relay/messages', async (req, res) => {
   if (!chatTokenOk(req)) return sendChat(res, 401, { ok: false, error: '群聊令牌不正确或已被吊销' });
+  if (chatState.enabled === false) return sendChat(res, 403, { ok: false, enabled: false, error: '群聊已关闭' });
   if (!chatRateOk('relay:' + clientIp(req))) return sendChat(res, 429, { ok: false, error: '发言太快, 请稍后再试' });
   const body = await readBody(req);
   try {

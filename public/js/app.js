@@ -759,7 +759,7 @@ async function enterAdmin(st, afterLogin) {
   const sideUser = $('#side-user');
   if (sideUser) sideUser.innerHTML = `<b>${esc(S.username)}</b><span>ROOT ADMINISTRATOR</span>`;
   const ver = $('#side-ver');
-  if (ver) ver.textContent = 'OS v' + (st.version || '1.7.0') + ' · ADMIN';
+  if (ver) ver.textContent = 'OS v' + (st.version || '1.7.1') + ' · ADMIN';
   await buildSidebar();
   navigate('dashboard');
   startTicker();
@@ -1210,15 +1210,59 @@ function renderChatMember(c) { renderChat(c, false); }
 
 function renderChat(c, admin) {
   stopChatPoll();
+  const state = { enabled: true };
+  let toggleInput = null;
+  let toggleState = null;
+  let localOn = true;
+  let localToggle = null;
   const wrap = el('div', 'gc-wrap');
   const notice = el('div', 'gc-notice');
   notice.innerHTML = '<b>文明发言</b> · 希望大家文明发言，不文明的字符将会变成星号（*）。'
     + '脏话与涉黄、涉赌、涉毒内容都算不文明字符；中继在服务端强制替换，客户端显示前也会再过滤一次。';
   wrap.appendChild(notice);
 
+  if (!admin) {
+    localOn = localStorage.getItem('ts-chat-local') !== '0';
+    const card = el('div', 'gc-settings card');
+    const row = el('label', 'gc-switch');
+    localToggle = document.createElement('input');
+    localToggle.type = 'checkbox';
+    localToggle.checked = localOn;
+    const localState = el('span', 'gc-switch-state', localOn ? '我的群聊已开启' : '我的群聊已关闭');
+    row.appendChild(localToggle);
+    row.appendChild(el('span', 'gc-switch-label', '启用群聊'));
+    row.appendChild(localState);
+    card.appendChild(row);
+    card.appendChild(el('div', 'gc-hint', '这是你自己的开关：关闭后本机不再轮询、不再发言，也不会影响其他用户。'));
+    wrap.appendChild(card);
+    localToggle.onchange = () => {
+      localOn = localToggle.checked;
+      localStorage.setItem('ts-chat-local', localOn ? '1' : '0');
+      localState.textContent = localOn ? '我的群聊已开启' : '我的群聊已关闭';
+      if (localOn) {
+        lastId = 0; seen.clear(); loaded = false; log.innerHTML = '';
+        input.disabled = false; btn.disabled = false;
+        poll(true); startPolling();
+        toast('群聊已开启');
+      } else {
+        showLocalOff();
+        toast('群聊已关闭');
+      }
+    };
+  }
+
   if (admin) {
     const card = el('div', 'gc-settings card');
     card.appendChild(el('div', 'card-title', '群聊中继'));
+    const toggleRow = el('label', 'gc-switch');
+    toggleInput = document.createElement('input');
+    toggleInput.type = 'checkbox';
+    toggleInput.checked = true;
+    toggleState = el('span', 'gc-switch-state', '群聊已开启');
+    toggleRow.appendChild(toggleInput);
+    toggleRow.appendChild(el('span', 'gc-switch-label', '启用群聊'));
+    toggleRow.appendChild(toggleState);
+    card.appendChild(toggleRow);
     const info = el('div', 'gc-kv');
     info.appendChild(el('span', '', '中继地址'));
     const relay = el('code', '', esc(location.origin));
@@ -1317,6 +1361,7 @@ function renderChat(c, admin) {
     const stick = first || nearBottom();
     try {
       const r = await api('GET', '/api/chat/messages?after=' + (first ? 0 : lastId));
+      if (r.enabled === false) { showClosed(); return; }
       (r.messages || []).forEach(m => addMessage(m, m.via === 'os' && m.name === S.username));
       if (stick) log.scrollTop = log.scrollHeight;
       if (first) loaded = true;
@@ -1328,9 +1373,39 @@ function renderChat(c, admin) {
     }
   }
 
+  function startPolling() {
+    stopChatPoll();
+    chatPollTimer = setInterval(() => poll(false), 3500);
+  }
+
+  function showClosed() {
+    stopChatPoll();
+    state.enabled = false;
+    log.innerHTML = '';
+    log.appendChild(el('div', 'empty-tip', '群聊已关闭。管理员可以在群聊页重新开启。'));
+    input.disabled = true;
+    btn.disabled = true;
+    if (toggleInput) { toggleInput.checked = false; toggleState.textContent = '群聊已关闭'; }
+  }
+
+  function showLocalOff() {
+    stopChatPoll();
+    log.innerHTML = '';
+    log.appendChild(el('div', 'empty-tip', '你已关闭群聊。打开上方开关即可重新加入。'));
+    input.disabled = true;
+    btn.disabled = true;
+  }
+
+  function showOpen() {
+    state.enabled = true;
+    input.disabled = false;
+    btn.disabled = false;
+    if (toggleInput) { toggleInput.checked = true; toggleState.textContent = '群聊已开启'; }
+  }
+
   async function send() {
     const text = chatMask(input.value.trim());
-    if (!text || btn.disabled) return;
+    if (!text || btn.disabled || !state.enabled) return;
     btn.disabled = true;
     try {
       const r = await api('POST', '/api/chat/messages', { text });
@@ -1338,9 +1413,10 @@ function renderChat(c, admin) {
       addMessage(r.message, true);
       log.scrollTop = log.scrollHeight;
     } catch (e) {
+      if (/群聊已关闭/.test(e.message)) showClosed();
       toast(e.message, true);
     } finally {
-      btn.disabled = false;
+      if (state.enabled) btn.disabled = false;
       input.focus();
     }
   }
@@ -1349,9 +1425,44 @@ function renderChat(c, admin) {
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
-  poll(true);
-  chatPollTimer = setInterval(() => poll(false), 3500);
-  input.focus();
+
+  if (toggleInput) {
+    toggleInput.onchange = async () => {
+      const desired = toggleInput.checked;
+      toggleInput.disabled = true;
+      try {
+        const r = await api('POST', '/api/chat/enabled', { enabled: desired });
+        if (r.enabled) {
+          lastId = 0; seen.clear(); loaded = false; log.innerHTML = '';
+          showOpen();
+          poll(true);
+          startPolling();
+          toast('群聊已开启');
+        } else {
+          showClosed();
+          toast('群聊已关闭');
+        }
+      } catch (e) {
+        toggleInput.checked = !desired;
+        toast(e.message, true);
+      } finally {
+        toggleInput.disabled = false;
+      }
+    };
+  }
+
+  (async () => {
+    if (!admin && !localOn) { showLocalOff(); return; }
+    try {
+      const r = await api('GET', '/api/chat/info');
+      state.enabled = r.enabled !== false;
+    } catch (e) { state.enabled = true; }
+    if (!state.enabled) { showClosed(); return; }
+    showOpen();
+    poll(true);
+    startPolling();
+    input.focus();
+  })();
 }
 
 /* ---- 数据库 (管理员 / 会员 / 共享视图共用) ---- */
@@ -2416,7 +2527,7 @@ async function renderSettings(c) {
 async function renderAbout(c) {
   c.innerHTML = '';
   let st;
-  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.7.0' }; }
+  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.7.1' }; }
   const card = el('div', 'card');
   card.innerHTML = `<div style="text-align:center;padding:18px 8px">
     <div style="position:relative;width:130px;height:130px;margin:0 auto">
@@ -2425,7 +2536,7 @@ async function renderAbout(c) {
     <h2 style="margin-top:18px;letter-spacing:5px;color:var(--primary)">TENSAINT<span style="color:var(--text)">73</span>OS</h2>
     <div style="font-size:9px;color:var(--dim);letter-spacing:3px;margin-top:7px">圣钥协议 · SANCTUM KEY PROTOCOL</div>
     <div class="mono-list" style="text-align:left;margin-top:24px;line-height:2.2">
-      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.7.0')}</span></div>
+      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.7.1')}</span></div>
       <div><span class="k">数据库加密</span><span class="v">AES-256-GCM · 管理员库 / 会员库双轨</span></div>
       <div><span class="k">权限模型</span><span class="v">管理员全局 · 会员仅见自己的文件与数据表</span></div>
       <div><span class="k">文件隔离</span><span class="v">每个账号独立虚拟根目录, 接口层强制隔离</span></div>
@@ -2865,7 +2976,7 @@ async function renderAdminAccount(c) {
     <div class="node-tag">${esc(S.nodeId || 'TS73-······')}</div>
     <div style="margin-top:18px">
       <div class="identity-row"><span>角色</span><b>ROOT ADMINISTRATOR</b></div>
-      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.7.0')}</b></div>
+      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.7.1')}</b></div>
       <div class="identity-row"><span>全局数据库</span><b>${st.locked ? '加密锁定' : '已解锁 · AES-256-GCM'}</b></div>
       <div class="identity-row"><span>会话策略</span><b>12h 滑动过期</b></div>
     </div>`;

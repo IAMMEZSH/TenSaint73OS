@@ -1,4 +1,4 @@
-TenSaint73OS · The Saint Key Protocol · v1.7.0
+TenSaint73OS · The Saint Key Protocol · v1.7.1
 ============================================================
 
 A zero-dependency, fully local encrypted private space:
@@ -193,7 +193,7 @@ nothing is synchronized automatically.
   https://gitcode.com/gcw_So3EkhfR/TenSaint73OS
 - Old-version users are reminded in the only channel this project has: the
   login page of the instance they already use. v1.5.1 and newer (including
-  v1.7.0) show the notice with the latest version number before login, for
+  v1.7.1) show the notice with the latest version number before login, for
   owners and members alike, as soon as a newer release is published. There is
   no email list, phone list or push service, and an instance
   that is never opened again cannot be reached; owners should also read the
@@ -202,8 +202,13 @@ nothing is synchronized automatically.
 
 8. Group chat relay (大厅)
 ------------------------------------------------------------
-- One room, "大厅". Signed-in members post from their console. There is no
-  private chat and no direct message.
+- One room, "大厅". Every signed-in account - administrator or member - can
+  read and post. There is no private chat and no direct message.
+- Every account has a personal "启用群聊" switch. Turning it off stops that
+  browser's polling and posting immediately, sends no chat request and does not
+  affect anybody else. The administrator also has a room-wide switch that
+  closes the room for everyone; members then see a closed notice, posting and
+  polling stop, and relay clients receive "群聊已关闭".
 - Administrators create room tokens for the other three projects. Only the
   SHA-256 hash is stored; the plaintext is shown once. Those clients are
   disabled by default and send no chat request until the user enables chat.
