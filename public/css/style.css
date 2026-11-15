@@ -632,6 +632,30 @@ table.tbl tr:hover td { background: rgba(var(--accent-rgb), .04); }
 .chat-suggests { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 7px; }
 .chat-suggests .btn { font-size: 9px; padding: 4px 10px; }
 
+/* ---- 群聊 ---- */
+.gc-wrap { display: flex; flex-direction: column; gap: 12px; height: calc(100vh - 70px - 30px - 60px); height: calc(100dvh - 70px - 30px - 60px); }
+.gc-notice { flex: none; padding: 9px 12px; font-size: 10px; line-height: 1.8; color: var(--text); background: rgba(var(--accent-rgb), .05); border: 1px solid rgba(var(--accent-rgb), .16); border-left: 2px solid var(--accent); }
+.gc-notice b { color: var(--accent); letter-spacing: 2px; }
+.gc-settings { flex: none; padding: 15px 18px; }
+.gc-kv { display: flex; gap: 10px; align-items: center; font-size: 10px; color: var(--dim); margin: 4px 0 8px; flex-wrap: wrap; }
+.gc-kv code, .gc-token-value { color: var(--primary); font-size: 11px; word-break: break-all; }
+.gc-token-state { font-size: 10px; color: var(--dim); margin-bottom: 8px; }
+.gc-token { margin: 10px 0; padding: 10px; border: 1px dashed rgba(var(--primary-rgb), .3); background: rgba(var(--primary-rgb), .03); }
+.gc-token-label { font-size: 9px; letter-spacing: 2px; color: var(--danger); margin-bottom: 6px; }
+.gc-token-value { display: block; padding: 7px 0; }
+.gc-hint { font-size: 10px; line-height: 1.9; color: var(--dim); margin: 8px 0; }
+.gc-hint b { color: var(--text); }
+.gc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.gc-log { flex: 1; min-height: 120px; overflow-y: auto; padding: 6px 3px; }
+.gc-msg { margin-bottom: 12px; animation: fadeUp .3s ease both; }
+.gc-msg.mine { text-align: right; }
+.gc-meta { display: flex; align-items: center; gap: 8px; font-size: 9px; color: var(--dim); margin-bottom: 4px; letter-spacing: 1px; }
+.gc-msg.mine .gc-meta { justify-content: flex-end; }
+.gc-name { color: var(--accent); }
+.gc-via { font-size: 8px; padding: 1px 5px; border: 1px solid var(--line); color: var(--dim); }
+.gc-bubble { display: inline-block; max-width: 82%; padding: 9px 13px; font-size: 12px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; text-align: left; background: rgba(var(--accent-rgb), .05); border: 1px solid rgba(var(--accent-rgb), .18); border-left: 2px solid var(--accent); }
+.gc-msg.mine .gc-bubble { background: rgba(var(--primary-rgb), .07); border: 1px solid var(--line); border-right: 2px solid var(--primary); }
+
 .log-line { font-size: 11px; line-height: 1.9; border-bottom: 1px dashed rgba(var(--primary-rgb), .08); padding: 2px 0; }
 .log-line .lt { color: var(--dim); margin-right: 9px; }
 .log-line.info .ll { color: var(--accent); }
@@ -977,6 +1001,9 @@ table.tbl tr:hover td { background: rgba(var(--accent-rgb), .04); }
   .ticker { height: 26px; padding: 0 10px; font-size: 8px; gap: 7px; }
   .ticker-label { font-size: 7px; padding: 1px 5px; }
   .chat-wrap { height: calc(100vh - 52px - 26px - 24px); height: calc(100dvh - 52px - 26px - 24px); }
+  .gc-wrap { height: calc(100vh - 52px - 26px - 24px); height: calc(100dvh - 52px - 26px - 24px); }
+  .gc-settings { padding: 12px 14px; }
+  .gc-bubble { max-width: 92%; }
   .grid, .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
   .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .stat-card { min-height: 100px; padding: 13px; }

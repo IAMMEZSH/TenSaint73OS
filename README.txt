@@ -1,4 +1,4 @@
-TenSaint73OS · The Saint Key Protocol · v1.6.0
+TenSaint73OS · The Saint Key Protocol · v1.7.0
 ============================================================
 
 A zero-dependency, fully local encrypted private space:
@@ -192,14 +192,38 @@ nothing is synchronized automatically.
   https://github.com/IAMMEZSH/TenSaint73OS/releases/latest
   https://gitcode.com/gcw_So3EkhfR/TenSaint73OS
 - Old-version users are reminded in the only channel this project has: the
-  login page of the instance they already use. v1.5.1 and newer show the notice
-  before login, for owners and members alike, as soon as a newer release is
-  published. There is no email list, phone list or push service, and an instance
+  login page of the instance they already use. v1.5.1 and newer (including
+  v1.7.0) show the notice with the latest version number before login, for
+  owners and members alike, as soon as a newer release is published. There is
+  no email list, phone list or push service, and an instance
   that is never opened again cannot be reached; owners should also read the
   release notes on both platforms.
 
 
-8. Reminders
+8. Group chat relay (大厅)
+------------------------------------------------------------
+- One room, "大厅". Signed-in members post from their console. There is no
+  private chat and no direct message.
+- Administrators create room tokens for the other three projects. Only the
+  SHA-256 hash is stored; the plaintext is shown once. Those clients are
+  disabled by default and send no chat request until the user enables chat.
+- The room states: 希望大家文明发言，不文明的字符将会变成星号。
+  Profanity and any pornography-, gambling- or drug-related term (黄赌毒) are
+  uncivil characters. The server replaces every matched term with asterisks of
+  the same length before the message is stored or relayed; every client filters
+  again before display. Chinese terms match as substrings; English terms use
+  word boundaries.
+- Messages are sealed to data/chat.dat with AES-256-GCM. The last 200 are
+  kept; text is capped at 2,000 characters and a name at 24; each client may
+  post 20 messages per minute; clients poll every 3.5 seconds.
+- Only /api/chat/relay/* allows cross-origin requests. Every other console API
+  remains same-origin. Tokens can be revoked at any time, and the administrator
+  can clear the room.
+- Chat is not a side channel: it never exposes member databases, files or
+  passwords.
+
+
+9. Reminders
 ------------------------------------------------------------
 - data/ contains the auth vault and encrypted data. Do not upload it to public
   storage or send it to untrusted people.

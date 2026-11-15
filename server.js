@@ -26,7 +26,7 @@ const USERDATA = path.join(DATA, 'users');
 const USER_FILES = path.join(FILES, 'users');
 const PUBLIC = path.join(ROOT, 'public');
 const SYSTEM_NAME = 'TenSaint73OS';
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 // 官方发行页 (更新提示用; 隧道地址仍由 cloudflared 随机生成, 这里不写死任何公网地址)
 const OFFICIAL_URL = 'https://github.com/IAMMEZSH/TenSaint73OS';
 const RELEASES_URL = OFFICIAL_URL + '/releases/latest';
@@ -347,6 +347,7 @@ const MEMBER_ROUTES = new Set([
   '/api/db/insert', '/api/db/update', '/api/db/delete',
   '/api/db/clear', '/api/db/addcol', '/api/db/delcol',
   '/api/fs/list', '/api/fs/download', '/api/fs/mkdir', '/api/fs/upload', '/api/fs/delete',
+  '/api/chat/info', '/api/chat/messages',
 ]);
 
 // 共享空间: 管理员在「用户 → 授权」里逐表/逐目录授予 r 或 rw 之后, 会员从这里访问全局资源。
@@ -736,6 +737,136 @@ function unsealBytes(buf) {
   return Buffer.concat([decipher.update(enc), decipher.final()]);
 }
 const isSealed = buf => buf.length > 32 && buf.subarray(0, 4).toString('latin1') === FILE_MAGIC;
+
+/* ---------------- 群聊中继 ----------------
+   一个共享房间, 两个入口:
+   - 本机账号: /api/chat/* (会话鉴权, 名字就是登录名)
+   - 其他三个项目: /api/chat/relay/* (Bearer 房间令牌)
+   消息加密落盘; 中继只保存文本、昵称与时间, 不记录 IP、UA 或任何位置信息。 */
+const CHAT_FILE = path.join(DATA, 'chat.dat');
+const CHAT_ROOM = '大厅';
+const CHAT_KEEP = 200;
+const CHAT_MAX_TEXT = 2000;
+const CHAT_MAX_NAME = 24;
+const CHAT_CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Max-Age': '600',
+};
+// 文明发言: 脏话、涉黄、涉赌、涉毒一律按不文明字符处理, 命中后按原字符数替换成星号。
+// 服务端强制替换, 不依赖客户端; 英文词加单词边界, 避免误伤 better 之类的普通词。
+const CHAT_BANNED = [
+  '傻逼', '煞笔', '沙比', '脑残', '智障', '贱人', '婊子', '王八蛋', '畜生', '狗东西',
+  '操你妈', '草你妈', '草泥马', '他妈的', '弄死你', '杀了你', '强奸', '轮奸',
+  '色情', '黄色网站', '黄片', '毛片', '成人视频', '裸聊', '约炮', '嫖娼', '卖淫', '援交',
+  '一夜情', '淫秽', '淫荡', '自慰', '手淫', '口交', '肛交', '乳交', '鸡巴', '肉棒',
+  '赌博', '赌场', '赌球', '赌钱', '博彩', '六合彩', '时时彩', '百家乐', '老虎机', '下注', '押注',
+  '毒品', '吸毒', '贩毒', '冰毒', '海洛因', '大麻', '可卡因', '摇头丸', 'K粉', '麻古', '制毒',
+  'fuck', 'fucking', 'motherfucker', 'shit', 'bitch', 'asshole', 'bastard', 'cunt',
+  'dickhead', 'whore', 'slut', 'nigger', 'nigga', 'faggot', 'retard',
+  'porn', 'porno', 'pornhub', 'sex', 'sexting', 'nude', 'naked', 'xxx',
+  'casino', 'gambling', 'gamble', 'betting', 'blackjack', 'roulette', 'baccarat',
+  'heroin', 'cocaine', 'meth', 'marijuana', 'cannabis', 'fentanyl', 'ecstasy', 'ketamine', 'opium', 'drugs',
+];
+const CHAT_BANNED_RE = new RegExp('(' + CHAT_BANNED
+  .map(w => /[\u4e00-\u9fff]/.test(w)
+    ? w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    : '\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b')
+  .sort((a, b) => b.length - a.length)
+  .join('|') + ')', 'gi');
+
+let chatState = { messages: [], nextId: 1, tokenHash: '', tokenCreatedAt: 0 };
+try {
+  if (fs.existsSync(CHAT_FILE)) {
+    const parsed = JSON.parse(unsealBytes(fs.readFileSync(CHAT_FILE)).toString('utf8'));
+    if (parsed && Array.isArray(parsed.messages)) chatState = Object.assign(chatState, parsed);
+  }
+} catch (e) {
+  console.log('[!] 群聊记录无法解密, 已从空房间开始。');
+}
+
+function saveChat() {
+  try {
+    const tmp = CHAT_FILE + '.tmp';
+    fs.writeFileSync(tmp, sealBytes(Buffer.from(JSON.stringify(chatState), 'utf8')));
+    fs.renameSync(tmp, CHAT_FILE);
+  } catch (e) {
+    console.log('[!] 群聊记录写入失败: ' + e.message);
+  }
+}
+
+function chatClean(value, max) {
+  return String(value == null ? '' : value)
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, max);
+}
+
+function chatFilter(text) {
+  return String(text || '').replace(CHAT_BANNED_RE, m => '*'.repeat(m.length));
+}
+
+function chatTokenHash(token) {
+  return crypto.createHash('sha256').update('TenSaint73OS::chat::' + token).digest('hex');
+}
+
+function chatTokenOk(req) {
+  const raw = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  if (!raw || !chatState.tokenHash) return false;
+  const got = Buffer.from(chatTokenHash(raw), 'hex');
+  const want = Buffer.from(chatState.tokenHash, 'hex');
+  return got.length === want.length && crypto.timingSafeEqual(got, want);
+}
+
+const chatRate = new Map();
+function chatRateOk(key) {
+  const now = Date.now();
+  const recent = (chatRate.get(key) || []).filter(t => now - t < 60000);
+  if (recent.length >= 20) { chatRate.set(key, recent); return false; }
+  recent.push(now);
+  chatRate.set(key, recent);
+  if (chatRate.size > 200) {
+    for (const [k, v] of chatRate) if (!v.length || now - v[v.length - 1] > 120000) chatRate.delete(k);
+  }
+  return true;
+}
+
+function chatList(after) {
+  const n = Number(after);
+  const from = Number.isFinite(n) && n > 0 ? n : 0;
+  const messages = chatState.messages.filter(m => m.id > from).slice(-100);
+  return {
+    room: CHAT_ROOM,
+    messages,
+    latest: chatState.messages.length ? chatState.messages[chatState.messages.length - 1].id : 0,
+  };
+}
+
+function chatPush(name, text, via) {
+  const cleanText = chatFilter(chatClean(text, CHAT_MAX_TEXT));
+  if (!cleanText) throw new Error('消息不能为空');
+  const cleanName = chatFilter(chatClean(name, CHAT_MAX_NAME)) || '访客';
+  const message = {
+    id: chatState.nextId++,
+    at: new Date().toISOString(),
+    name: cleanName,
+    text: cleanText,
+    via: via === 'relay' ? 'relay' : 'os',
+  };
+  chatState.messages.push(message);
+  if (chatState.messages.length > CHAT_KEEP) chatState.messages = chatState.messages.slice(-CHAT_KEEP);
+  saveChat();
+  return message;
+}
+
+function sendChat(res, code, obj) {
+  send(res, code, obj, CHAT_CORS);
+}
 
 route('GET', '/api/fs/list', async (req, res, user) => {
   if (isAdmin(user) && !requireFeature(res, 'files')) return;
@@ -1639,13 +1770,100 @@ route('POST', '/api/tools/hash', async (req, res, user) => {
   send(res, 200, { sha256: util.sha256(t), md5: crypto.createHash('md5').update(t).digest('hex'), sha1: crypto.createHash('sha1').update(t).digest('hex') });
 });
 
+/* ---------------- 群聊 API ---------------- */
+route('GET', '/api/chat/info', (req, res, user) => {
+  send(res, 200, {
+    ok: true, room: CHAT_ROOM, relay: true,
+    messages: chatState.messages.length,
+    tokenConfigured: !!chatState.tokenHash,
+    tokenCreatedAt: chatState.tokenCreatedAt || 0,
+  });
+});
+
+route('GET', '/api/chat/messages', (req, res, user) => {
+  const q = new URLSearchParams(req.url.split('?')[1] || '');
+  send(res, 200, Object.assign({ ok: true }, chatList(q.get('after'))));
+});
+
+route('POST', '/api/chat/messages', async (req, res, user) => {
+  if (!chatRateOk('user:' + user.username)) return send(res, 429, { error: '发言太快, 请稍后再试' });
+  const body = await readBody(req);
+  try {
+    const message = chatPush(user.username, body.text, 'os');
+    send(res, 200, { ok: true, message });
+  } catch (e) {
+    send(res, 400, { error: e.message });
+  }
+});
+
+route('POST', '/api/chat/clear', (req, res, user) => {
+  if (!isAdmin(user)) return send(res, 403, { error: '只有最高管理员可以清空群聊' });
+  chatState.messages = [];
+  saveChat();
+  send(res, 200, { ok: true });
+});
+
+route('GET', '/api/chat/token', (req, res, user) => {
+  if (!isAdmin(user)) return send(res, 403, { error: '只有最高管理员可以管理群聊令牌' });
+  send(res, 200, {
+    ok: true, configured: !!chatState.tokenHash, createdAt: chatState.tokenCreatedAt || 0,
+    room: CHAT_ROOM,
+  });
+});
+
+route('POST', '/api/chat/token', (req, res, user) => {
+  if (!isAdmin(user)) return send(res, 403, { error: '只有最高管理员可以生成群聊令牌' });
+  const token = crypto.randomBytes(24).toString('base64url');
+  chatState.tokenHash = chatTokenHash(token);
+  chatState.tokenCreatedAt = Date.now();
+  saveChat();
+  store.log('warn', '群聊中继令牌已生成');
+  send(res, 200, {
+    ok: true, token, createdAt: chatState.tokenCreatedAt, room: CHAT_ROOM,
+    note: '令牌只显示这一次。请把它填进其他项目的群聊设置; 丢失后只能重新生成。',
+  });
+});
+
+route('POST', '/api/chat/token/revoke', (req, res, user) => {
+  if (!isAdmin(user)) return send(res, 403, { error: '只有最高管理员可以吊销群聊令牌' });
+  chatState.tokenHash = '';
+  chatState.tokenCreatedAt = 0;
+  saveChat();
+  store.log('warn', '群聊中继令牌已吊销');
+  send(res, 200, { ok: true });
+});
+
+route('GET', '/api/chat/relay/info', (req, res) => {
+  if (!chatTokenOk(req)) return sendChat(res, 401, { ok: false, error: '群聊令牌不正确或已被吊销' });
+  sendChat(res, 200, { ok: true, room: CHAT_ROOM, relay: true, messages: chatState.messages.length });
+});
+
+route('GET', '/api/chat/relay/messages', (req, res) => {
+  if (!chatTokenOk(req)) return sendChat(res, 401, { ok: false, error: '群聊令牌不正确或已被吊销' });
+  const q = new URLSearchParams(req.url.split('?')[1] || '');
+  sendChat(res, 200, Object.assign({ ok: true }, chatList(q.get('after'))));
+});
+
+route('POST', '/api/chat/relay/messages', async (req, res) => {
+  if (!chatTokenOk(req)) return sendChat(res, 401, { ok: false, error: '群聊令牌不正确或已被吊销' });
+  if (!chatRateOk('relay:' + clientIp(req))) return sendChat(res, 429, { ok: false, error: '发言太快, 请稍后再试' });
+  const body = await readBody(req);
+  try {
+    const message = chatPush(body.name, body.text, 'relay');
+    sendChat(res, 200, { ok: true, message });
+  } catch (e) {
+    sendChat(res, 400, { ok: false, error: e.message });
+  }
+});
+
 /* ---------------- 请求处理 ---------------- */
 async function handleApi(req, res, pathname) {
   const r = routes.find(x => x.method === req.method && x.pattern === pathname);
   if (!r) return send(res, 404, { error: 'API_NOT_FOUND' });
 
   // 公开路由
-  if (pathname === '/api/login' || pathname === '/api/register' || pathname === '/api/state' || pathname === '/api/theme' || pathname === '/api/logout' || pathname === '/api/update' || pathname === '/api/access' || pathname === '/api/visit') {
+  if (pathname === '/api/login' || pathname === '/api/register' || pathname === '/api/state' || pathname === '/api/theme' || pathname === '/api/logout' || pathname === '/api/update' || pathname === '/api/access' || pathname === '/api/visit'
+    || pathname === '/api/chat/relay/info' || pathname === '/api/chat/relay/messages') {
     return r.handlers[0](req, res);
   }
 
@@ -1675,6 +1893,10 @@ async function handleApi(req, res, pathname) {
 const server = http.createServer(async (req, res) => {
   const pathname = req.url.split('?')[0];
   try {
+    if (req.method === 'OPTIONS' && pathname.startsWith('/api/chat/relay/')) {
+      res.writeHead(204, Object.assign({}, SEC_HEADERS, CHAT_CORS));
+      return res.end();
+    }
     if (pathname.startsWith('/api/')) return await handleApi(req, res, pathname);
     if (req.method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
       auth.noteVisitor({ ip: clientIp(req), ua: req.headers['user-agent'], kind: 'page', path: '/' });

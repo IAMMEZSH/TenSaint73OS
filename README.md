@@ -11,7 +11,7 @@ A local-first, zero-dependency, encrypted multi-user workspace that runs on Wind
   <code>AES-256-GCM</code> · <code>scrypt</code> · <code>PER-USER VAULTS</code> · <code>PHONE 2FA</code> · <code>OWNER KEY</code> · <code>OPTIONAL CLOUDFLARE TUNNEL</code>
 </p>
 
-<p align="center"><strong>Version 1.6.0</strong> · Node.js 18+ · no npm runtime dependencies · no telemetry · no cloud account</p>
+<p align="center"><strong>Version 1.7.0</strong> · Node.js 18+ · no npm runtime dependencies · no telemetry · no cloud account</p>
 
 > **Public builds are member-only on first launch.**
 > They contain **no admin account, no real database and no keys**.
@@ -205,6 +205,38 @@ What *is* real:
   Cloudflare account and domain).
 - No inbound port forwarding is required.
 
+### Group chat relay (群聊)
+
+- **One room, “大厅”.** Signed-in members read and post from their console.
+  There is no private chat, no direct message and no member-to-member channel.
+- **Guests join with a room token, never with an account.** The administrator
+  creates a token in the console; only its SHA-256 hash is stored, and the
+  plaintext is shown once. The other three projects (Global Reading Room,
+  Wanjuan Ge, Geo Position Workstation) connect with that token and are
+  **disabled by default** — they send no chat request until the user ticks
+  “启用群聊” and saves.
+- **Civility is enforced, not merely announced.** The room states:
+  **“希望大家文明发言，不文明的字符将会变成星号。”** Profanity and any
+  pornography-, gambling- or drug-related term (黄赌毒) are uncivil characters.
+  The server replaces every matched term with `*` of the same length **before
+  the message is stored or fanned out**; each client filters again before
+  display. Chinese terms match as substrings; English terms use word
+  boundaries, so “better” is not mangled by “bet”. The list is shared by the
+  server and all three clients.
+- **Sealed at rest.** The room is sealed to `data/chat.dat` with the same
+  AES-256-GCM envelope used elsewhere; the file never contains plaintext
+  messages.
+- **Bounded and rate-limited.** The last 200 messages are kept; each message is
+  at most 2,000 characters, a display name at most 24; each client may post 20
+  messages per minute; every client polls every 3.5 seconds.
+- **Narrow CORS surface.** Only `/api/chat/relay/*` answers cross-origin
+  requests, with `Access-Control-Allow-Origin: *`; every other console API keeps
+  the same-origin policy. The relay needs no account data, and guest tokens can
+  be revoked at any time.
+- **The administrator can create/revoke tokens and clear the room**, but chat
+  never becomes a side channel into member databases or files: it carries only
+  the room's messages.
+
 ### Operations
 
 - Backup script for Termux; folder-level backup for desktop platforms.
@@ -222,27 +254,30 @@ What *is* real:
 
 <table>
   <tr>
-    <td width="50%"><img src="screenshots/login.png?v=1.6.0" alt="Login"><br><sub><b>Login</b> — password plus optional bound-phone second factor.</sub></td>
-    <td width="50%"><img src="screenshots/admin-console.png?v=1.6.0" alt="Admin console"><br><sub><b>Admin console</b> — encrypted system database unlocked, live telemetry.</sub></td>
+    <td width="50%"><img src="screenshots/login.png?v=1.7.0" alt="Login"><br><sub><b>Login</b> — password plus optional bound-phone second factor.</sub></td>
+    <td width="50%"><img src="screenshots/admin-console.png?v=1.7.0" alt="Admin console"><br><sub><b>Admin console</b> — encrypted system database unlocked, live telemetry.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/database.png?v=1.6.0" alt="Global database browser"><br><sub><b>Global database</b> — the sole administrator browses the unlocked system store.</sub></td>
-    <td><img src="screenshots/grants.png?v=1.6.0" alt="Per-member grant dialog"><br><sub><b>Grant dialog</b> — per-table and per-directory read / read-write levels.</sub></td>
+    <td><img src="screenshots/database.png?v=1.7.0" alt="Global database browser"><br><sub><b>Global database</b> — the sole administrator browses the unlocked system store.</sub></td>
+    <td><img src="screenshots/grants.png?v=1.7.0" alt="Per-member grant dialog"><br><sub><b>Grant dialog</b> — per-table and per-directory read / read-write levels.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/shared-space.png?v=1.6.0" alt="Member shared space"><br><sub><b>Shared space</b> — a member sees only the granted tables and directories.</sub></td>
-    <td><img src="screenshots/shared-table.png?v=1.6.0" alt="Shared table opened read-write"><br><sub><b>Shared table</b> — row insert/edit/delete inside an <code>rw</code> grant; no DDL.</sub></td>
+    <td><img src="screenshots/shared-space.png?v=1.7.0" alt="Member shared space"><br><sub><b>Shared space</b> — a member sees only the granted tables and directories.</sub></td>
+    <td><img src="screenshots/shared-table.png?v=1.7.0" alt="Shared table opened read-write"><br><sub><b>Shared table</b> — row insert/edit/delete inside an <code>rw</code> grant; no DDL.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/shared-files.png?v=1.6.0" alt="Shared directory opened read-write"><br><sub><b>Shared directory</b> — upload, mkdir, download and delete inside the granted subtree.</sub></td>
-    <td><img src="screenshots/member-space.png?v=1.6.0" alt="Member space"><br><sub><b>Member space</b> — isolated per-user vault and workspace.</sub></td>
+    <td><img src="screenshots/shared-files.png?v=1.7.0" alt="Shared directory opened read-write"><br><sub><b>Shared directory</b> — upload, mkdir, download and delete inside the granted subtree.</sub></td>
+    <td><img src="screenshots/member-space.png?v=1.7.0" alt="Member space"><br><sub><b>Member space</b> — isolated per-user vault and workspace.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/member-account.png?v=1.6.0" alt="Account security"><br><sub><b>Account security</b> — role summary, password rotation and phone-binding second factor.</sub></td>
-    <td><img src="screenshots/tunnel.png?v=1.6.0" alt="Tunnel control"><br><sub><b>Tunnel control</b> — administrator-only Cloudflare tunnel opened from the console; the public URL is issued on demand.</sub></td>
+    <td><img src="screenshots/member-account.png?v=1.7.0" alt="Account security"><br><sub><b>Account security</b> — role summary, password rotation and phone-binding second factor.</sub></td>
+    <td><img src="screenshots/tunnel.png?v=1.7.0" alt="Tunnel control"><br><sub><b>Tunnel control</b> — administrator-only Cloudflare tunnel opened from the console; the public URL is issued on demand.</sub></td>
   </tr>
   <tr>
-    <td colspan="2"><img src="screenshots/usage.png?v=1.6.0" alt="User statistics"><br><sub><b>User statistics</b> — registered accounts, signed-in and unauthenticated visitors, online now, 24-hour and 7-day activity, failed logins and rejected requests. Account and network metadata only; member files and tables never enter this view.</sub></td>
+    <td colspan="2"><img src="screenshots/usage.png?v=1.7.0" alt="User statistics"><br><sub><b>User statistics</b> — registered accounts, signed-in and unauthenticated visitors, online now, 24-hour and 7-day activity, failed logins and rejected requests. Account and network metadata only; member files and tables never enter this view.</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="screenshots/chat-room.png?v=1.7.0" alt="Group chat relay"><br><sub><b>Group chat “大厅”</b> — the room states «希望大家文明发言，不文明的字符将会变成星号»; profanity and pornography-, gambling- or drug-related terms are replaced by asterisks on the server before storage, and clipped again by every client before display.</sub></td>
   </tr>
 </table>
 
@@ -254,7 +289,7 @@ The request path, the trust boundary and the two inbound rules are drawn once,
 in the figure below; the sections that follow add the details.
 
 <div align="center">
-  <img src="docs/architecture.svg?v=1.6.0" alt="Request path, trust boundary, ports and data directories" width="100%">
+  <img src="docs/architecture.svg?v=1.7.0" alt="Request path, trust boundary, ports and data directories" width="100%">
 </div>
 
 ### 5.1 Trust boundary
@@ -334,7 +369,7 @@ security key. Anyone who controls both the password and the bound SIM can log in
 ### 5.5 Per-user isolation
 
 <div align="center">
-  <img src="docs/isolation.svg?v=1.6.0" alt="Per-member isolation, the admin's 403 endpoints, path resolution and deletion" width="100%">
+  <img src="docs/isolation.svg?v=1.7.0" alt="Per-member isolation, the admin's 403 endpoints, path resolution and deletion" width="100%">
 </div>
 
 Each member gets:
@@ -373,7 +408,7 @@ software only on hardware you trust.
 ### 5.6 Data grants and the shared view
 
 <div align="center">
-  <img src="docs/grants.svg?v=1.6.0" alt="Grant model, member view, live revocation and the shared endpoint status table" width="100%">
+  <img src="docs/grants.svg?v=1.7.0" alt="Grant model, member view, live revocation and the shared endpoint status table" width="100%">
 </div>
 
 Isolation (§5.5) answers “who can see this member's data”. Grants answer the
@@ -485,7 +520,7 @@ Be explicit about the limits:
 ### 5.10 Owner key (`.tsowner`)
 
 <div align="center">
-  <img src="docs/owner-key.svg?v=1.6.0" alt="Owner-key export, the .tsowner envelope, import rules and the identity-versus-data boundary" width="100%">
+  <img src="docs/owner-key.svg?v=1.7.0" alt="Owner-key export, the .tsowner envelope, import rules and the identity-versus-data boundary" width="100%">
 </div>
 
 The owner key solves a specific problem: the public package cannot contain admin
@@ -516,7 +551,7 @@ passphrase never are.
 ## 6. Five platforms, one core
 
 <div align="center">
-  <img src="docs/platforms.svg?v=1.6.0" alt="Windows, Linux, macOS, Termux and iSH command cards with the exact launcher commands" width="100%">
+  <img src="docs/platforms.svg?v=1.7.0" alt="Windows, Linux, macOS, Termux and iSH command cards with the exact launcher commands" width="100%">
 </div>
 
 | | Windows | Linux | macOS | Android | iPhone / iPad |
@@ -829,7 +864,7 @@ files, so these values do not constrain a member's own space.
 - Connection close — a body above 50 MB is refused before routing, so nothing is
   written to disk.
 
-These are the defaults for v1.6.0. The constants live in `core/auth.js`
+These are the defaults for v1.7.0. The constants live in `core/auth.js`
 (`SESSION_TTL`), `core/userstore.js` (`MAX_*`), `core/store.js` (log and URL
 caps) and `server.js` (body cap and rate limit).
 
@@ -868,7 +903,7 @@ back into the history. Stopping the tunnel from the console does the same, and a
 tunnel that has gone offline is never re-added automatically.
 
 <div align="center">
-  <img src="docs/tunnel-flow.svg?v=1.6.0" alt="Outbound tunnel sequence, the publishing path, run-online.sh and the named-tunnel alternative" width="100%">
+  <img src="docs/tunnel-flow.svg?v=1.7.0" alt="Outbound tunnel sequence, the publishing path, run-online.sh and the named-tunnel alternative" width="100%">
 </div>
 
 ### 9.2 The fine print
@@ -929,17 +964,18 @@ release page when only that source answered. The continuity guarantee is:
 list or push service, so nobody can be contacted outside the software itself.
 What every old installation *can* do is remind whoever opens it:
 
-- v1.5.1 and v1.6.0 already contain this in-app notice. Once v1.6.0 is the
-  newest GitHub release, an old v1.5.1 instance that still holds data shows the
-  upgrade notice on its login page at the next page open. That covers every
-  member and the owner of that instance, because the notice is rendered before
-  login and is not tied to a role.
+- v1.5.1, v1.6.0 and v1.7.0 already contain this in-app notice. Once v1.7.0 is
+  the newest GitHub release, an old v1.5.1 or v1.6.0 instance that still holds
+  data shows the upgrade notice — with the latest version number — on its login
+  page at the next page open. That covers every member and the owner of that
+  instance, because the notice is rendered before login and is not tied to a
+  role.
 - Members normally reconnect through a fresh browser session after the owner
   restarts or upgrades the instance; the notice is visible on that login screen.
   An instance that is never opened again cannot be reached by any channel; this
   limitation is stated here instead of being hidden.
 - Release notes on both platforms carry the same upgrade instructions, and the
-  v1.6.0 update check also queries GitCode so installations that cannot reach
+  v1.6.0+ update check also queries GitCode so installations that cannot reach
   GitHub still receive future notices.
 
 A copy older than the notice feature has no update channel and cannot be
@@ -1047,7 +1083,7 @@ Do not expose port 7373 directly. Plain HTTP would send passwords in the clear.
 ### 11.1 Data layout
 
 <div align="center">
-  <img src="docs/data-layout.svg?v=1.6.0" alt="The data directory tree, plaintext versus sealed files, restore-as-one-set, backup commands and update survival" width="100%">
+  <img src="docs/data-layout.svg?v=1.7.0" alt="The data directory tree, plaintext versus sealed files, restore-as-one-set, backup commands and update survival" width="100%">
 </div>
 
 ```text
@@ -1517,6 +1553,6 @@ with or endorsed by them.
 ---
 
 <div align="center">
-  <sub>TENSAINT73OS · THE SAINT KEY PROTOCOL · V1.6.0</sub><br>
+  <sub>TENSAINT73OS · THE SAINT KEY PROTOCOL · V1.7.0</sub><br>
   <sub>LOCAL-FIRST · ENCRYPTED · ZERO-DEPENDENCY · FIVE PLATFORMS</sub>
 </div>
