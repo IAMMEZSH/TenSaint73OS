@@ -157,7 +157,7 @@ databases; system.db alone cannot be restored without the salt.
 To restore, unpack into ~/TenSaint73OS; the exact command is printed at the end
 of backup.sh.
 The backup is still your private data. Do not upload it to public storage or
-group chats.
+shared spaces.
 
 8. Per-person grants (optional, administrator)
 ----------------------------------------------
@@ -174,7 +174,7 @@ immediately.
 - The server binds 127.0.0.1 by default; external access must go through the
   HTTPS tunnel.
 - data/ contains the encrypted databases, auth.json, system.db and install.salt.
-  Do not upload it to public storage, group chats or untrusted people.
+  Do not upload it to public storage, shared spaces or untrusted people.
 - A forgotten administrator password cannot decrypt system.db. Keep both the
   backup and the password.
 - Keep Node.js and cloudflared updated; do not install repackaged builds from
