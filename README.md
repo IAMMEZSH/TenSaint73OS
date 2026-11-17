@@ -11,7 +11,7 @@ A local-first, zero-dependency, encrypted multi-user workspace that runs on Wind
   <code>AES-256-GCM</code> · <code>scrypt</code> · <code>PER-USER VAULTS</code> · <code>PHONE 2FA</code> · <code>OWNER KEY</code> · <code>OPTIONAL CLOUDFLARE TUNNEL</code>
 </p>
 
-<p align="center"><strong>Version 1.7.1</strong> · Node.js 18+ · no npm runtime dependencies · no telemetry · no cloud account</p>
+<p align="center"><strong>Version 1.8.0</strong> · Node.js 18+ · no npm runtime dependencies · no telemetry · no cloud account</p>
 
 > **Public builds are member-only on first launch.**
 > They contain **no admin account, no real database and no keys**.
@@ -23,16 +23,16 @@ A local-first, zero-dependency, encrypted multi-user workspace that runs on Wind
 
 ## Download
 
-**Windows 10/11 (x64), one click:** [`TenSaint73OS-Windows-x64.zip`](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Windows-x64.zip) — unzip it, then run `TenSaint73OS-Launcher.exe`.
+**Windows 10/11 (x64), one click:** [`TenSaint73OS-Windows-x64.zip`](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.8.0/TenSaint73OS-Windows-x64.zip) — unzip it, then run `TenSaint73OS-Launcher.exe`.
 
 | Platform | Release artifact | GitHub | GitCode |
 |---|---|---|---|
-| Windows 10/11 (x64) | `TenSaint73OS-Windows-x64.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Windows-x64.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Windows-x64.zip) |
-| Linux x86_64 / arm64 | `TenSaint73OS-Linux-x64-arm64.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Linux-x64-arm64.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Linux-x64-arm64.zip) |
-| macOS Apple Silicon / Intel | `TenSaint73OS-macOS.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-macOS.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-macOS.zip) |
-| Android · Termux | `TenSaint73OS-Android-Termux.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Android-Termux.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-Android-Termux.zip) |
-| iPhone / iPad · iSH | `TenSaint73OS-iPhone-iSH.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-iPhone-iSH.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/TenSaint73OS-iPhone-iSH.zip) |
-| Checksums | `SHA256SUMS.txt` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.7.1/SHA256SUMS.txt) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.7.1/SHA256SUMS.txt) |
+| Windows 10/11 (x64) | `TenSaint73OS-Windows-x64.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.8.0/TenSaint73OS-Windows-x64.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.8.0/TenSaint73OS-Windows-x64.zip) |
+| Linux x86_64 / arm64 | `TenSaint73OS-Linux-x64-arm64.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.8.0/TenSaint73OS-Linux-x64-arm64.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.8.0/TenSaint73OS-Linux-x64-arm64.zip) |
+| macOS Apple Silicon / Intel | `TenSaint73OS-macOS.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.8.0/TenSaint73OS-macOS.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.8.0/TenSaint73OS-macOS.zip) |
+| Android · Termux | `TenSaint73OS-Android-Termux.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.8.0/TenSaint73OS-Android-Termux.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.8.0/TenSaint73OS-Android-Termux.zip) |
+| iPhone / iPad · iSH | `TenSaint73OS-iPhone-iSH.zip` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.8.0/TenSaint73OS-iPhone-iSH.zip) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.8.0/TenSaint73OS-iPhone-iSH.zip) |
+| Checksums | `SHA256SUMS.txt` | [Download](https://github.com/IAMMEZSH/TenSaint73OS/releases/download/v1.8.0/SHA256SUMS.txt) | [Download](https://gitcode.com/gcw_So3EkhfR/TenSaint73OS/releases/download/v1.8.0/SHA256SUMS.txt) |
 
 Both mirrors carry the same six assets with identical names and SHA-256 hashes. The public packages contain no administrator account, no real database and no keys; the owner key is imported separately (see §7.3).
 
@@ -220,46 +220,6 @@ What *is* real:
   Cloudflare account and domain).
 - No inbound port forwarding is required.
 
-### Group chat relay (群聊)
-
-- **One room, “大厅”.** Signed-in members read and post from their console.
-  There is no private chat, no direct message and no member-to-member channel.
-- **Everyone can speak, and everyone has a real switch.** Every signed-in
-  account — administrator or member — can read and post in the room. Each
-  account also has a personal “启用群聊” switch: turning it off stops that
-  browser’s polling and posting immediately and sends no chat request, without
-  affecting anybody else. The administrator additionally has a room-wide switch
-  that closes the room for everyone; closing shows a closed notice, stops
-  posting and polling, and makes every relay client receive “群聊已关闭”.
-  Reopening restores the same sealed history.
-- **Guests join with a room token, never with an account.** The administrator
-  creates a token in the console; only its SHA-256 hash is stored, and the
-  plaintext is shown once. The other three projects (Global Reading Room,
-  Wanjuan Ge, Geo Position Workstation) connect with that token and are
-  **disabled by default** — they send no chat request until the user ticks
-  “启用群聊” and saves.
-- **Civility is enforced, not merely announced.** The room states:
-  **“希望大家文明发言，不文明的字符将会变成星号。”** Profanity and any
-  pornography-, gambling- or drug-related term (黄赌毒) are uncivil characters.
-  The server replaces every matched term with `*` of the same length **before
-  the message is stored or fanned out**; each client filters again before
-  display. Chinese terms match as substrings; English terms use word
-  boundaries, so “better” is not mangled by “bet”. The list is shared by the
-  server and all three clients.
-- **Sealed at rest.** The room is sealed to `data/chat.dat` with the same
-  AES-256-GCM envelope used elsewhere; the file never contains plaintext
-  messages.
-- **Bounded and rate-limited.** The last 200 messages are kept; each message is
-  at most 2,000 characters, a display name at most 24; each client may post 20
-  messages per minute; every client polls every 3.5 seconds.
-- **Narrow CORS surface.** Only `/api/chat/relay/*` answers cross-origin
-  requests, with `Access-Control-Allow-Origin: *`; every other console API keeps
-  the same-origin policy. The relay needs no account data, and guest tokens can
-  be revoked at any time.
-- **The administrator can create/revoke tokens and clear the room**, but chat
-  never becomes a side channel into member databases or files: it carries only
-  the room's messages.
-
 ### Operations
 
 - Backup script for Termux; folder-level backup for desktop platforms.
@@ -277,33 +237,27 @@ What *is* real:
 
 <table>
   <tr>
-    <td width="50%"><img src="screenshots/login.png?v=1.7.1" alt="Login"><br><sub><b>Login</b> — password plus optional bound-phone second factor.</sub></td>
-    <td width="50%"><img src="screenshots/admin-console.png?v=1.7.1" alt="Admin console"><br><sub><b>Admin console</b> — encrypted system database unlocked, live telemetry.</sub></td>
+    <td width="50%"><img src="screenshots/login.png?v=1.8.0" alt="Login"><br><sub><b>Login</b> — password plus optional bound-phone second factor.</sub></td>
+    <td width="50%"><img src="screenshots/admin-console.png?v=1.8.0" alt="Admin console"><br><sub><b>Admin console</b> — encrypted system database unlocked, live telemetry.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/database.png?v=1.7.1" alt="Global database browser"><br><sub><b>Global database</b> — the sole administrator browses the unlocked system store.</sub></td>
-    <td><img src="screenshots/grants.png?v=1.7.1" alt="Per-member grant dialog"><br><sub><b>Grant dialog</b> — per-table and per-directory read / read-write levels.</sub></td>
+    <td><img src="screenshots/database.png?v=1.8.0" alt="Global database browser"><br><sub><b>Global database</b> — the sole administrator browses the unlocked system store.</sub></td>
+    <td><img src="screenshots/grants.png?v=1.8.0" alt="Per-member grant dialog"><br><sub><b>Grant dialog</b> — per-table and per-directory read / read-write levels.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/shared-space.png?v=1.7.1" alt="Member shared space"><br><sub><b>Shared space</b> — a member sees only the granted tables and directories.</sub></td>
-    <td><img src="screenshots/shared-table.png?v=1.7.1" alt="Shared table opened read-write"><br><sub><b>Shared table</b> — row insert/edit/delete inside an <code>rw</code> grant; no DDL.</sub></td>
+    <td><img src="screenshots/shared-space.png?v=1.8.0" alt="Member shared space"><br><sub><b>Shared space</b> — a member sees only the granted tables and directories.</sub></td>
+    <td><img src="screenshots/shared-table.png?v=1.8.0" alt="Shared table opened read-write"><br><sub><b>Shared table</b> — row insert/edit/delete inside an <code>rw</code> grant; no DDL.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/shared-files.png?v=1.7.1" alt="Shared directory opened read-write"><br><sub><b>Shared directory</b> — upload, mkdir, download and delete inside the granted subtree.</sub></td>
-    <td><img src="screenshots/member-space.png?v=1.7.1" alt="Member space"><br><sub><b>Member space</b> — isolated per-user vault and workspace.</sub></td>
+    <td><img src="screenshots/shared-files.png?v=1.8.0" alt="Shared directory opened read-write"><br><sub><b>Shared directory</b> — upload, mkdir, download and delete inside the granted subtree.</sub></td>
+    <td><img src="screenshots/member-space.png?v=1.8.0" alt="Member space"><br><sub><b>Member space</b> — isolated per-user vault and workspace.</sub></td>
   </tr>
   <tr>
-    <td><img src="screenshots/member-account.png?v=1.7.1" alt="Account security"><br><sub><b>Account security</b> — role summary, password rotation and phone-binding second factor.</sub></td>
-    <td><img src="screenshots/tunnel.png?v=1.7.1" alt="Tunnel control"><br><sub><b>Tunnel control</b> — administrator-only Cloudflare tunnel opened from the console; the public URL is issued on demand.</sub></td>
+    <td><img src="screenshots/member-account.png?v=1.8.0" alt="Account security"><br><sub><b>Account security</b> — role summary, password rotation and phone-binding second factor.</sub></td>
+    <td><img src="screenshots/tunnel.png?v=1.8.0" alt="Tunnel control"><br><sub><b>Tunnel control</b> — administrator-only Cloudflare tunnel opened from the console; the public URL is issued on demand.</sub></td>
   </tr>
   <tr>
-    <td colspan="2"><img src="screenshots/usage.png?v=1.7.1" alt="User statistics"><br><sub><b>User statistics</b> — registered accounts, signed-in and unauthenticated visitors, online now, 24-hour and 7-day activity, failed logins and rejected requests. Account and network metadata only; member files and tables never enter this view.</sub></td>
-  </tr>
-  <tr>
-    <td colspan="2"><img src="screenshots/chat-room.png?v=1.7.1" alt="Group chat relay"><br><sub><b>Group chat “大厅”</b> — the administrator’s view: the room states «希望大家文明发言，不文明的字符将会变成星号»; profanity and pornography-, gambling- or drug-related terms are replaced by asterisks on the server before storage, and clipped again by every client before display. The room-wide switch and the relay token live on this page.</sub></td>
-  </tr>
-  <tr>
-    <td colspan="2"><img src="screenshots/chat-member.png?v=1.7.1" alt="Member group chat"><br><sub><b>Member view of “大厅”</b> — every signed-in member can read and post, not only the administrator. Each member has a personal “启用群聊” switch that stops this browser’s polling and posting with zero chat requests; turning it off never affects anybody else. The member’s own message and every seeded profanity/黄赌毒 term are masked.</sub></td>
+    <td colspan="2"><img src="screenshots/usage.png?v=1.8.0" alt="User statistics"><br><sub><b>User statistics</b> — registered accounts, signed-in and unauthenticated visitors, online now, 24-hour and 7-day activity, failed logins and rejected requests. Account and network metadata only; member files and tables never enter this view.</sub></td>
   </tr>
 </table>
 
@@ -315,7 +269,7 @@ The request path, the trust boundary and the two inbound rules are drawn once,
 in the figure below; the sections that follow add the details.
 
 <div align="center">
-  <img src="docs/architecture.svg?v=1.7.1" alt="Request path, trust boundary, ports and data directories" width="100%">
+  <img src="docs/architecture.svg?v=1.8.0" alt="Request path, trust boundary, ports and data directories" width="100%">
 </div>
 
 ### 5.1 Trust boundary
@@ -395,7 +349,7 @@ security key. Anyone who controls both the password and the bound SIM can log in
 ### 5.5 Per-user isolation
 
 <div align="center">
-  <img src="docs/isolation.svg?v=1.7.1" alt="Per-member isolation, the admin's 403 endpoints, path resolution and deletion" width="100%">
+  <img src="docs/isolation.svg?v=1.8.0" alt="Per-member isolation, the admin's 403 endpoints, path resolution and deletion" width="100%">
 </div>
 
 Each member gets:
@@ -434,7 +388,7 @@ software only on hardware you trust.
 ### 5.6 Data grants and the shared view
 
 <div align="center">
-  <img src="docs/grants.svg?v=1.7.1" alt="Grant model, member view, live revocation and the shared endpoint status table" width="100%">
+  <img src="docs/grants.svg?v=1.8.0" alt="Grant model, member view, live revocation and the shared endpoint status table" width="100%">
 </div>
 
 Isolation (§5.5) answers “who can see this member's data”. Grants answer the
@@ -546,7 +500,7 @@ Be explicit about the limits:
 ### 5.10 Owner key (`.tsowner`)
 
 <div align="center">
-  <img src="docs/owner-key.svg?v=1.7.1" alt="Owner-key export, the .tsowner envelope, import rules and the identity-versus-data boundary" width="100%">
+  <img src="docs/owner-key.svg?v=1.8.0" alt="Owner-key export, the .tsowner envelope, import rules and the identity-versus-data boundary" width="100%">
 </div>
 
 The owner key solves a specific problem: the public package cannot contain admin
@@ -577,7 +531,7 @@ passphrase never are.
 ## 6. Five platforms, one core
 
 <div align="center">
-  <img src="docs/platforms.svg?v=1.7.1" alt="Windows, Linux, macOS, Termux and iSH command cards with the exact launcher commands" width="100%">
+  <img src="docs/platforms.svg?v=1.8.0" alt="Windows, Linux, macOS, Termux and iSH command cards with the exact launcher commands" width="100%">
 </div>
 
 | | Windows | Linux | macOS | Android | iPhone / iPad |
@@ -890,7 +844,7 @@ files, so these values do not constrain a member's own space.
 - Connection close — a body above 50 MB is refused before routing, so nothing is
   written to disk.
 
-These are the defaults for v1.7.1. The constants live in `core/auth.js`
+These are the defaults for v1.8.0. The constants live in `core/auth.js`
 (`SESSION_TTL`), `core/userstore.js` (`MAX_*`), `core/store.js` (log and URL
 caps) and `server.js` (body cap and rate limit).
 
@@ -929,7 +883,7 @@ back into the history. Stopping the tunnel from the console does the same, and a
 tunnel that has gone offline is never re-added automatically.
 
 <div align="center">
-  <img src="docs/tunnel-flow.svg?v=1.7.1" alt="Outbound tunnel sequence, the publishing path, run-online.sh and the named-tunnel alternative" width="100%">
+  <img src="docs/tunnel-flow.svg?v=1.8.0" alt="Outbound tunnel sequence, the publishing path, run-online.sh and the named-tunnel alternative" width="100%">
 </div>
 
 ### 9.2 The fine print
@@ -990,9 +944,9 @@ release page when only that source answered. The continuity guarantee is:
 list or push service, so nobody can be contacted outside the software itself.
 What every old installation *can* do is remind whoever opens it:
 
-- v1.5.1, v1.6.0 and v1.7.1 already contain this in-app notice. Once v1.7.1 is
-  the newest GitHub release, an old v1.5.1 or v1.6.0 instance that still holds
-  data shows the upgrade notice — with the latest version number — on its login
+- v1.5.1, v1.6.0, v1.7.0 and v1.7.1 already contain this in-app notice. Once
+  v1.8.0 is the newest release, an old instance that still holds data shows the
+  upgrade notice — with the latest version number — on its login
   page at the next page open. That covers every member and the owner of that
   instance, because the notice is rendered before login and is not tied to a
   role.
@@ -1109,7 +1063,7 @@ Do not expose port 7373 directly. Plain HTTP would send passwords in the clear.
 ### 11.1 Data layout
 
 <div align="center">
-  <img src="docs/data-layout.svg?v=1.7.1" alt="The data directory tree, plaintext versus sealed files, restore-as-one-set, backup commands and update survival" width="100%">
+  <img src="docs/data-layout.svg?v=1.8.0" alt="The data directory tree, plaintext versus sealed files, restore-as-one-set, backup commands and update survival" width="100%">
 </div>
 
 ```text
@@ -1579,6 +1533,6 @@ with or endorsed by them.
 ---
 
 <div align="center">
-  <sub>TENSAINT73OS · THE SAINT KEY PROTOCOL · V1.7.1</sub><br>
+  <sub>TENSAINT73OS · THE SAINT KEY PROTOCOL · V1.8.0</sub><br>
   <sub>LOCAL-FIRST · ENCRYPTED · ZERO-DEPENDENCY · FIVE PLATFORMS</sub>
 </div>
