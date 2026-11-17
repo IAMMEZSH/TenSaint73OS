@@ -106,7 +106,7 @@ Data and security
   keeping an auth vault that already contains the administrator from a previous
   version. The program never generates administrator credentials.
 - After a run, data/ contains the encrypted auth vault, databases and
-  install.salt. Do not upload it to public storage or group chats. Back up
+  install.salt. Do not upload it to public storage or shared spaces. Back up
   install.salt together with the databases.
 - The default port is 7373 and the server binds 127.0.0.1 only. LAN access
   requires an explicit TS_BIND=0.0.0.0, with the plain-HTTP risk on you.
