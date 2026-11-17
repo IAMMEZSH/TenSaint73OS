@@ -1,3 +1,6 @@
+# Local build workspace
+_build/
+
 # Runtime data — never commit real vaults, keys or user content
 data/*
 admin.env

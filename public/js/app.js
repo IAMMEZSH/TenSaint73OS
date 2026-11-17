@@ -759,7 +759,7 @@ async function enterAdmin(st, afterLogin) {
   const sideUser = $('#side-user');
   if (sideUser) sideUser.innerHTML = `<b>${esc(S.username)}</b><span>ROOT ADMINISTRATOR</span>`;
   const ver = $('#side-ver');
-  if (ver) ver.textContent = 'OS v' + (st.version || '1.7.1') + ' · ADMIN';
+  if (ver) ver.textContent = 'OS v' + (st.version || '1.8.0') + ' · ADMIN';
   await buildSidebar();
   navigate('dashboard');
   startTicker();
@@ -801,7 +801,6 @@ async function enterMember(st) {
 const MODULES = {
   dashboard: { title: '控制台', render: renderDashboard },
   ai: { title: 'AI 助手', render: renderAI },
-  chat: { title: '群聊', render: renderChatAdmin },
   database: { title: '数据库', render: renderDatabase },
   files: { title: '文件仓库', render: renderFiles },
   users: { title: '用户管理', render: renderUsers },
@@ -835,16 +834,9 @@ async function buildSidebar() {
     item.onclick = () => navigate(id);
     nav.appendChild(item);
   }
-  // 群聊是共享房间, 不受「功能模块」开关影响: 关掉它会让其他项目的中继一起失联。
-  const chatItem = el('div', 'nav-item' + (S.current === 'chat' ? ' active' : ''));
-  chatItem.dataset.mod = 'chat';
-  chatItem.innerHTML = '<span class="nav-icon">◍</span>群聊';
-  chatItem.onclick = () => navigate('chat');
-  nav.appendChild(chatItem);
 }
 
 function navigate(id) {
-  stopChatPoll();
   if (!MODULES[id]) {
     const meta = S.featureMeta[id] || { name: id };
     S.current = id;
@@ -874,7 +866,6 @@ const MEMBER_MODULES = {
   files: { title: '我的文件', icon: '▤', render: renderMemberFiles },
   database: { title: '我的数据库', icon: '⛁', render: renderMemberDatabase },
   shared: { title: '共享空间', icon: '⇄', render: renderMemberShared },
-  chat: { title: '群聊', icon: '◍', render: renderChatMember },
   account: { title: '账户安全', icon: '⬡', render: renderMemberAccount },
 };
 
@@ -893,7 +884,6 @@ function buildMemberNav() {
 }
 
 async function memberNavigate(id) {
-  stopChatPoll();
   if (!MEMBER_MODULES[id]) return;
   S.memberTab = id;
   $$('#m-nav .nav-item').forEach(n => n.classList.toggle('active', n.dataset.mod === id));
@@ -1172,297 +1162,6 @@ function renderAI(c) {
   btn.onclick = send;
   input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
   input.focus();
-}
-
-/* ---- 群聊 (TenSaint73OS 同时是中继) ---- */
-let chatPollTimer = null;
-function stopChatPoll() {
-  if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
-}
-
-// 与 server.js 的 CHAT_BANNED 同一份规则: 脏话、涉黄、涉赌、涉毒都算不文明字符。
-// 服务端强制替换, 客户端显示前再兜一层; 英文词加单词边界, 避免误伤普通词。
-const CHAT_BANNED = [
-  '傻逼', '煞笔', '沙比', '脑残', '智障', '贱人', '婊子', '王八蛋', '畜生', '狗东西',
-  '操你妈', '草你妈', '草泥马', '他妈的', '弄死你', '杀了你', '强奸', '轮奸',
-  '色情', '黄色网站', '黄片', '毛片', '成人视频', '裸聊', '约炮', '嫖娼', '卖淫', '援交',
-  '一夜情', '淫秽', '淫荡', '自慰', '手淫', '口交', '肛交', '乳交', '鸡巴', '肉棒',
-  '赌博', '赌场', '赌球', '赌钱', '博彩', '六合彩', '时时彩', '百家乐', '老虎机', '下注', '押注',
-  '毒品', '吸毒', '贩毒', '冰毒', '海洛因', '大麻', '可卡因', '摇头丸', 'K粉', '麻古', '制毒',
-  'fuck', 'fucking', 'motherfucker', 'shit', 'bitch', 'asshole', 'bastard', 'cunt',
-  'dickhead', 'whore', 'slut', 'nigger', 'nigga', 'faggot', 'retard',
-  'porn', 'porno', 'pornhub', 'sex', 'sexting', 'nude', 'naked', 'xxx',
-  'casino', 'gambling', 'gamble', 'betting', 'blackjack', 'roulette', 'baccarat',
-  'heroin', 'cocaine', 'meth', 'marijuana', 'cannabis', 'fentanyl', 'ecstasy', 'ketamine', 'opium', 'drugs',
-];
-const CHAT_BANNED_RE = new RegExp('(' + CHAT_BANNED
-  .map(w => /[\u4e00-\u9fff]/.test(w)
-    ? w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    : '\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b')
-  .sort((a, b) => b.length - a.length)
-  .join('|') + ')', 'gi');
-function chatMask(text) {
-  return String(text ?? '').replace(CHAT_BANNED_RE, m => '*'.repeat(m.length));
-}
-
-function renderChatAdmin(c) { renderChat(c, true); }
-function renderChatMember(c) { renderChat(c, false); }
-
-function renderChat(c, admin) {
-  stopChatPoll();
-  const state = { enabled: true };
-  let toggleInput = null;
-  let toggleState = null;
-  let localOn = true;
-  let localToggle = null;
-  const wrap = el('div', 'gc-wrap');
-  const notice = el('div', 'gc-notice');
-  notice.innerHTML = '<b>文明发言</b> · 希望大家文明发言，不文明的字符将会变成星号（*）。'
-    + '脏话与涉黄、涉赌、涉毒内容都算不文明字符；中继在服务端强制替换，客户端显示前也会再过滤一次。';
-  wrap.appendChild(notice);
-
-  if (!admin) {
-    localOn = localStorage.getItem('ts-chat-local') !== '0';
-    const card = el('div', 'gc-settings card');
-    const row = el('label', 'gc-switch');
-    localToggle = document.createElement('input');
-    localToggle.type = 'checkbox';
-    localToggle.checked = localOn;
-    const localState = el('span', 'gc-switch-state', localOn ? '我的群聊已开启' : '我的群聊已关闭');
-    row.appendChild(localToggle);
-    row.appendChild(el('span', 'gc-switch-label', '启用群聊'));
-    row.appendChild(localState);
-    card.appendChild(row);
-    card.appendChild(el('div', 'gc-hint', '这是你自己的开关：关闭后本机不再轮询、不再发言，也不会影响其他用户。'));
-    wrap.appendChild(card);
-    localToggle.onchange = () => {
-      localOn = localToggle.checked;
-      localStorage.setItem('ts-chat-local', localOn ? '1' : '0');
-      localState.textContent = localOn ? '我的群聊已开启' : '我的群聊已关闭';
-      if (localOn) {
-        lastId = 0; seen.clear(); loaded = false; log.innerHTML = '';
-        input.disabled = false; btn.disabled = false;
-        poll(true); startPolling();
-        toast('群聊已开启');
-      } else {
-        showLocalOff();
-        toast('群聊已关闭');
-      }
-    };
-  }
-
-  if (admin) {
-    const card = el('div', 'gc-settings card');
-    card.appendChild(el('div', 'card-title', '群聊中继'));
-    const toggleRow = el('label', 'gc-switch');
-    toggleInput = document.createElement('input');
-    toggleInput.type = 'checkbox';
-    toggleInput.checked = true;
-    toggleState = el('span', 'gc-switch-state', '群聊已开启');
-    toggleRow.appendChild(toggleInput);
-    toggleRow.appendChild(el('span', 'gc-switch-label', '启用群聊'));
-    toggleRow.appendChild(toggleState);
-    card.appendChild(toggleRow);
-    const info = el('div', 'gc-kv');
-    info.appendChild(el('span', '', '中继地址'));
-    const relay = el('code', '', esc(location.origin));
-    info.appendChild(relay);
-    card.appendChild(info);
-    const tokenState = el('div', 'gc-token-state', '正在读取令牌状态…');
-    card.appendChild(tokenState);
-    const tokenBox = el('div', 'gc-token hidden');
-    card.appendChild(tokenBox);
-    const hint = el('div', 'gc-hint');
-    hint.innerHTML = '另外三个项目打开「群聊」后填：<b>中继地址</b> = 本页地址；<b>令牌</b> = 这里生成的令牌；'
-      + '<b>昵称</b> = 你想显示的名字。跨设备聊天请用「访问地址」页里的隧道公网地址，填 localhost 只有本机能连。';
-    card.appendChild(hint);
-
-    const actions = el('div', 'gc-actions');
-    const gen = el('button', 'btn btn-accent', '生成 / 轮换令牌');
-    const revoke = el('button', 'btn btn-danger', '吊销令牌');
-    const clear = el('button', 'btn btn-danger', '清空消息');
-    actions.appendChild(gen); actions.appendChild(revoke); actions.appendChild(clear);
-    card.appendChild(actions);
-
-    async function refreshToken() {
-      try {
-        const r = await api('GET', '/api/chat/token');
-        tokenState.textContent = r.configured
-          ? ('令牌已启用 · 生成于 ' + fmtTime(new Date(r.createdAt).toISOString()))
-          : '尚未生成令牌：其他三个项目现在无法连接这个中继。';
-        revoke.disabled = !r.configured;
-      } catch (e) { tokenState.textContent = '读取失败: ' + e.message; }
-    }
-    gen.onclick = () => confirmBox('生成新令牌会立即让旧令牌失效，已经填了旧令牌的项目需要重新填写。令牌只显示一次。', async () => {
-      const r = await api('POST', '/api/chat/token');
-      tokenBox.classList.remove('hidden');
-      tokenBox.innerHTML = '';
-      const label = el('div', 'gc-token-label', '新令牌（只显示这一次）');
-      const code = el('code', 'gc-token-value');
-      code.textContent = r.token;
-      const copy = el('button', 'btn', '复制令牌');
-      copy.onclick = async () => {
-        try { await navigator.clipboard.writeText(r.token); toast('令牌已复制'); }
-        catch (e) { toast('复制失败，请手动选中复制', true); }
-      };
-      tokenBox.appendChild(label); tokenBox.appendChild(code); tokenBox.appendChild(copy);
-      await refreshToken();
-      toast('令牌已生成');
-    }, '生成');
-    revoke.onclick = () => confirmBox('吊销后，所有使用这个令牌的项目会立即断开，直到你生成新令牌。', async () => {
-      await api('POST', '/api/chat/token/revoke');
-      tokenBox.classList.add('hidden');
-      await refreshToken();
-      toast('令牌已吊销');
-    }, '吊销');
-    clear.onclick = () => confirmBox('清空后不可恢复（包括本机与其他项目发过的全部消息）。', async () => {
-      await api('POST', '/api/chat/clear');
-      toast('群聊已清空');
-    }, '清空');
-    wrap.appendChild(card);
-    refreshToken();
-  }
-
-  const log = el('div', 'chat-log gc-log');
-  wrap.appendChild(log);
-  const row = el('div', 'chat-input');
-  const input = inp('', '输入消息，Enter 发送');
-  input.maxLength = 2000;
-  const btn = el('button', 'btn', '发送');
-  row.appendChild(input);
-  row.appendChild(btn);
-  wrap.appendChild(row);
-  c.appendChild(wrap);
-
-  let lastId = 0;
-  let loaded = false;
-  const seen = new Set();
-
-  function nearBottom() {
-    return log.scrollHeight - log.scrollTop - log.clientHeight < 90;
-  }
-  function addMessage(m, mine) {
-    if (!m || !m.id || seen.has(m.id)) return;
-    seen.add(m.id);
-    lastId = Math.max(lastId, Number(m.id) || 0);
-    const item = el('div', 'gc-msg' + (mine ? ' mine' : ''));
-    const meta = el('div', 'gc-meta');
-    meta.appendChild(el('span', 'gc-name', esc(m.name || '访客')));
-    meta.appendChild(el('span', '', new Date(m.at).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })));
-    if (m.via === 'relay') meta.appendChild(el('span', 'gc-via', '中继'));
-    item.appendChild(meta);
-    const bubble = el('div', 'gc-bubble');
-    bubble.textContent = chatMask(m.text);
-    item.appendChild(bubble);
-    log.appendChild(item);
-  }
-
-  async function poll(first) {
-    const stick = first || nearBottom();
-    try {
-      const r = await api('GET', '/api/chat/messages?after=' + (first ? 0 : lastId));
-      if (r.enabled === false) { showClosed(); return; }
-      (r.messages || []).forEach(m => addMessage(m, m.via === 'os' && m.name === S.username));
-      if (stick) log.scrollTop = log.scrollHeight;
-      if (first) loaded = true;
-    } catch (e) {
-      if (first) {
-        log.innerHTML = '';
-        log.appendChild(el('div', 'empty-tip', '群聊加载失败: ' + esc(e.message)));
-      }
-    }
-  }
-
-  function startPolling() {
-    stopChatPoll();
-    chatPollTimer = setInterval(() => poll(false), 3500);
-  }
-
-  function showClosed() {
-    stopChatPoll();
-    state.enabled = false;
-    log.innerHTML = '';
-    log.appendChild(el('div', 'empty-tip', '群聊已关闭。管理员可以在群聊页重新开启。'));
-    input.disabled = true;
-    btn.disabled = true;
-    if (toggleInput) { toggleInput.checked = false; toggleState.textContent = '群聊已关闭'; }
-  }
-
-  function showLocalOff() {
-    stopChatPoll();
-    log.innerHTML = '';
-    log.appendChild(el('div', 'empty-tip', '你已关闭群聊。打开上方开关即可重新加入。'));
-    input.disabled = true;
-    btn.disabled = true;
-  }
-
-  function showOpen() {
-    state.enabled = true;
-    input.disabled = false;
-    btn.disabled = false;
-    if (toggleInput) { toggleInput.checked = true; toggleState.textContent = '群聊已开启'; }
-  }
-
-  async function send() {
-    const text = chatMask(input.value.trim());
-    if (!text || btn.disabled || !state.enabled) return;
-    btn.disabled = true;
-    try {
-      const r = await api('POST', '/api/chat/messages', { text });
-      input.value = '';
-      addMessage(r.message, true);
-      log.scrollTop = log.scrollHeight;
-    } catch (e) {
-      if (/群聊已关闭/.test(e.message)) showClosed();
-      toast(e.message, true);
-    } finally {
-      if (state.enabled) btn.disabled = false;
-      input.focus();
-    }
-  }
-
-  btn.onclick = send;
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-  });
-
-  if (toggleInput) {
-    toggleInput.onchange = async () => {
-      const desired = toggleInput.checked;
-      toggleInput.disabled = true;
-      try {
-        const r = await api('POST', '/api/chat/enabled', { enabled: desired });
-        if (r.enabled) {
-          lastId = 0; seen.clear(); loaded = false; log.innerHTML = '';
-          showOpen();
-          poll(true);
-          startPolling();
-          toast('群聊已开启');
-        } else {
-          showClosed();
-          toast('群聊已关闭');
-        }
-      } catch (e) {
-        toggleInput.checked = !desired;
-        toast(e.message, true);
-      } finally {
-        toggleInput.disabled = false;
-      }
-    };
-  }
-
-  (async () => {
-    if (!admin && !localOn) { showLocalOff(); return; }
-    try {
-      const r = await api('GET', '/api/chat/info');
-      state.enabled = r.enabled !== false;
-    } catch (e) { state.enabled = true; }
-    if (!state.enabled) { showClosed(); return; }
-    showOpen();
-    poll(true);
-    startPolling();
-    input.focus();
-  })();
 }
 
 /* ---- 数据库 (管理员 / 会员 / 共享视图共用) ---- */
@@ -2527,7 +2226,7 @@ async function renderSettings(c) {
 async function renderAbout(c) {
   c.innerHTML = '';
   let st;
-  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.7.1' }; }
+  try { st = await api('GET', '/api/state'); } catch (e) { st = { version: '1.8.0' }; }
   const card = el('div', 'card');
   card.innerHTML = `<div style="text-align:center;padding:18px 8px">
     <div style="position:relative;width:130px;height:130px;margin:0 auto">
@@ -2536,7 +2235,7 @@ async function renderAbout(c) {
     <h2 style="margin-top:18px;letter-spacing:5px;color:var(--primary)">TENSAINT<span style="color:var(--text)">73</span>OS</h2>
     <div style="font-size:9px;color:var(--dim);letter-spacing:3px;margin-top:7px">圣钥协议 · SANCTUM KEY PROTOCOL</div>
     <div class="mono-list" style="text-align:left;margin-top:24px;line-height:2.2">
-      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.7.1')}</span></div>
+      <div><span class="k">系统版本</span><span class="v hl">v${esc(st.version || '1.8.0')}</span></div>
       <div><span class="k">数据库加密</span><span class="v">AES-256-GCM · 管理员库 / 会员库双轨</span></div>
       <div><span class="k">权限模型</span><span class="v">管理员全局 · 会员仅见自己的文件与数据表</span></div>
       <div><span class="k">文件隔离</span><span class="v">每个账号独立虚拟根目录, 接口层强制隔离</span></div>
@@ -2976,7 +2675,7 @@ async function renderAdminAccount(c) {
     <div class="node-tag">${esc(S.nodeId || 'TS73-······')}</div>
     <div style="margin-top:18px">
       <div class="identity-row"><span>角色</span><b>ROOT ADMINISTRATOR</b></div>
-      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.7.1')}</b></div>
+      <div class="identity-row"><span>系统版本</span><b>v${esc(st.version || '1.8.0')}</b></div>
       <div class="identity-row"><span>全局数据库</span><b>${st.locked ? '加密锁定' : '已解锁 · AES-256-GCM'}</b></div>
       <div class="identity-row"><span>会话策略</span><b>12h 滑动过期</b></div>
     </div>`;
