@@ -944,7 +944,7 @@ release page when only that source answered. The continuity guarantee is:
 list or push service, so nobody can be contacted outside the software itself.
 What every old installation *can* do is remind whoever opens it:
 
-- v1.5.1, v1.6.0, v1.7.0 and v1.7.1 already contain this in-app notice. Once
+- Recent releases already contain this in-app notice. Once
   v1.8.0 is the newest release, an old instance that still holds data shows the
   upgrade notice — with the latest version number — on its login
   page at the next page open. That covers every member and the owner of that
@@ -955,7 +955,7 @@ What every old installation *can* do is remind whoever opens it:
   An instance that is never opened again cannot be reached by any channel; this
   limitation is stated here instead of being hidden.
 - Release notes on both platforms carry the same upgrade instructions, and the
-  v1.6.0+ update check also queries GitCode so installations that cannot reach
+  update check in recent builds also queries GitCode so installations that cannot reach
   GitHub still receive future notices.
 
 A copy older than the notice feature has no update channel and cannot be

@@ -192,7 +192,7 @@ nothing is synchronized automatically.
   https://github.com/IAMMEZSH/TenSaint73OS/releases/latest
   https://gitcode.com/gcw_So3EkhfR/TenSaint73OS
 - Old-version users are reminded in the only channel this project has: the
-  login page of the instance they already use. v1.5.1 and newer (including
+  login page of the instance they already use. Recent builds (including
   v1.8.0) show the notice with the latest version number before login, for
   owners and members alike, as soon as a newer release is published. There is
   no email list, phone list or push service, and an instance

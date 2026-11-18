@@ -33,7 +33,7 @@ const BUILTIN_FEATURES = [
 
 function defaultDoc() {
   return {
-    meta: { createdAt: now(), name: 'TenSaint73OS', version: '1.0.0' },
+    meta: { createdAt: now(), name: 'TenSaint73OS', version: '1.8.0' },
     settings: { port: 7373, theme: { ...DEFAULT_THEME } },
     tables: {
       示例表: {
